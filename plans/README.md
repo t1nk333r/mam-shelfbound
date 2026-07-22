@@ -23,8 +23,15 @@ commit messages are short and present-tense with no prefixes.
 | 005 | Fix stale `/health` reference in AGENTS.md | P2 | S | — | TODO |
 | 006 | Remove dead code (unused fields + empty common.js) | P3 | S | — | TODO |
 | 007 | Make search tolerate wedge-lookup failure | P3 | S | — | TODO |
+| 008 | Reintroduce qBittorrent as a selectable client | P2 | L | 001 (soft) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
+
+> **Note on 008**: added on 2026-07-22 via a targeted `plan` request, not the
+> original audit. It reintroduces qBittorrent support (dropped in commit
+> `66c30ef`) as an alternative backend behind a `TORRENT_CLIENT` env switch,
+> **without** reverting the Transmission-era features. It is a feature plan, not
+> an audit finding, and is independent of the P1 fixes above.
 
 ## Recommended sequence
 
@@ -49,10 +56,16 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED 
 - **004 → 001 (soft)**: 004 is safe without 001, but 001's suite is the
   regression net; 004's import smoke test also uses the env-configurable DB URL
   that 001 introduces.
-- **Plans that both edit `app/main.py`** (001, 003, 004, 006, 007) touch
+- **Plans that both edit `app/main.py`** (001, 003, 004, 006, 007, 008) touch
   *different regions*, but if executed in parallel worktrees they should be
   rebased and re-verified in the order above to avoid merge friction. 006 edits
   `list_completed_torrents`; 007 edits `search` — they do **not** overlap.
+- **008 ↔ 006**: 008 wraps `list_completed_torrents` in a `TransmissionClient`
+  method; 006 slims that same function. They are compatible in either order
+  (008 only reads `item.get("hash")`), but rebase and re-run smokes if both land.
+- **008 ↔ 001**: 008's unit tests (client-factory selection, `qb_tags`) live in
+  the suite 001 creates; if 001 hasn't landed, 008 defers those tests and relies
+  on the import smoke checks + manual qB verification.
 
 ## Findings considered and rejected
 
