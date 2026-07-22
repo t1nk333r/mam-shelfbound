@@ -24,14 +24,17 @@ commit messages are short and present-tense with no prefixes.
 | 006 | Remove dead code (unused fields + empty common.js) | P3 | S | — | TODO |
 | 007 | Make search tolerate wedge-lookup failure | P3 | S | — | TODO |
 | 008 | Reintroduce qBittorrent as a selectable client | P2 | L | 001 (soft) | TODO |
+| 009 | Default ebook adds to no-send (not sent to Kindle) | P2 | S | 001 (soft) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
-> **Note on 008**: added on 2026-07-22 via a targeted `plan` request, not the
-> original audit. It reintroduces qBittorrent support (dropped in commit
+> **Note on 008 / 009**: added on 2026-07-22 via targeted `plan` requests, not
+> the original audit. **008** reintroduces qBittorrent support (dropped in commit
 > `66c30ef`) as an alternative backend behind a `TORRENT_CLIENT` env switch,
-> **without** reverting the Transmission-era features. It is a feature plan, not
-> an audit finding, and is independent of the P1 fixes above.
+> **without** reverting the Transmission-era features. **009** flips the
+> `Send to Kindle` ebook default to off (no-send by default), reusing the
+> machinery from commit `6773809`. Both are feature/behavior plans, not audit
+> findings, and are independent of the P1 fixes above.
 
 ## Recommended sequence
 
@@ -66,6 +69,13 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED 
 - **008 ↔ 001**: 008's unit tests (client-factory selection, `qb_tags`) live in
   the suite 001 creates; if 001 hasn't landed, 008 defers those tests and relies
   on the import smoke checks + manual qB verification.
+- **009 ↔ 008**: both edit the `/add` function in `app/main.py` but different
+  regions (009 the `send_to_kindle` coercion at line 423 + a helper near line 57;
+  008 the torrent-add call at lines 452-458). No textual overlap; rebase and
+  re-run `py_compile` + tests if both land. The no-send default flows into both
+  torrent clients unchanged.
+- **009 ↔ 001**: 009's unit test (`default_send_to_kindle`) lives in the suite
+  001 creates; deferred to a grep + manual UI check if 001 hasn't landed.
 
 ## Findings considered and rejected
 
