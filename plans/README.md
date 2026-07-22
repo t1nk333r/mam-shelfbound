@@ -25,6 +25,8 @@ commit messages are short and present-tense with no prefixes.
 | 007 | Make search tolerate wedge-lookup failure | P3 | S | — | TODO |
 | 008 | Reintroduce qBittorrent as a selectable client | P2 | L | 001 (soft) | TODO |
 | 009 | Default ebook adds to no-send (not sent to Kindle) | P2 | S | 001 (soft) | TODO |
+| 010 | Add `.dockerignore` to slim the build context | P3 | S | — | TODO |
+| 011 | Clamp search `perpage` to the allowed {25,50,100} | P3 | S | 001 (soft) | TODO |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
 
@@ -76,6 +78,32 @@ Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED 
   torrent clients unchanged.
 - **009 ↔ 001**: 009's unit test (`default_send_to_kindle`) lives in the suite
   001 creates; deferred to a grep + manual UI check if 001 hasn't landed.
+
+## Deep sweep (2026-07-22) — lower-confidence tier, verdicts
+
+A `deep` re-audit surfaced these LOW-confidence items. Two became plans (010,
+011); the rest are recorded here with honest verdicts so they are not re-audited.
+The source was unchanged from the standard audit at the time of this sweep.
+
+- **`.dockerignore` absent** → **planned (010)**. Whole repo ships to the build context.
+- **`perpage` unvalidated** (`app/main.py:210`) → **planned (011)**. Forwarded to MAM as-is.
+- **Sync DB on the event loop**: `insert_history`/`update_history_status`/`mark_history_*`
+  use blocking `engine.begin()` inside async `/add`, `retry_history_import`, and the
+  auto-import loop. *Not worth doing* — serialization only bites under concurrency this
+  single-user app won't see. (`history()` is a sync `def`, so FastAPI already threadpools it.)
+- **Unused `curl` in the image** (`Dockerfile:11`): installed but unreferenced since the
+  healthcheck was removed (`fc9251e`). *Trivial, unplanned* — drop it if touching the Dockerfile.
+- **Container runs as root** (no `USER` in `Dockerfile`): *deferred/direction* — adding a
+  non-root user (MED effort) changes ownership of hardlinked/copied library files and can
+  break existing deployments' volume permissions; a maintainer decision, not an auto-fix.
+- **Base image not digest-pinned** (`python:3.12-slim`): *note-only* — same reproducibility
+  theme as plan 002; pin a digest if builds must be byte-reproducible.
+- **Poll interval / umask no longer env-configurable** (`app/main.py:20,24`, hardcoded
+  constants): *note-only* — a deliberate simplification; re-expose via env only if a user needs it.
+- **Upstream error text forwarded to client** (`app/main.py:231,320` include `r.text[:300]`):
+  *not worth doing* — single user owns both ends.
+- **Swallowed `umask` error** (`app/main.py:84-85` `except Exception: pass`): *note-only* — best-effort.
+- CSS (`app/static/common.css`) scanned: no external `@import`/`url()` — clean.
 
 ## Findings considered and rejected
 
