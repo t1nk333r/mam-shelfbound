@@ -85,8 +85,9 @@ if _um:
         pass
 
 # ---------------------------- DB ----------------------------
-# /data should be a volume/bind mount
-engine = create_engine("sqlite:////data/history.db", future=True)
+# /data should be a volume/bind mount. Override with HISTORY_DB_URL for tests.
+HISTORY_DB_URL = os.getenv("HISTORY_DB_URL", "sqlite:////data/history.db")
+engine = create_engine(HISTORY_DB_URL, future=True)
 
 def utcnow_str() -> str:
     return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
