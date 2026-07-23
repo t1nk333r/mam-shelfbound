@@ -280,22 +280,24 @@ async def search(payload: dict):
     }
     params = {"dlLink": "1"}
 
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
+        try:
             r = await client.post(f"{settings.MAM_BASE}/tor/js/loadSearchJSONbasic.php",
                                   headers=headers, params=params, json=body)
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"MAM request failed: {e}")
+        except httpx.HTTPError as e:
+            raise HTTPException(status_code=502, detail=f"MAM request failed: {e}")
 
-    if r.status_code != 200:
-        raise HTTPException(status_code=502, detail=f"MAM HTTP {r.status_code}: {r.text[:300]}")
-    try:
-        raw = r.json()
-    except ValueError:
-        raise HTTPException(status_code=502, detail=f"MAM returned non-JSON. Body: {r.text[:300]}")
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail=f"MAM HTTP {r.status_code}: {r.text[:300]}")
+        try:
+            raw = r.json()
+        except ValueError:
+            raise HTTPException(status_code=502, detail=f"MAM returned non-JSON. Body: {r.text[:300]}")
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        freeleech_wedges = await fetch_freeleech_wedge_count(client)
+        try:
+            freeleech_wedges = await fetch_freeleech_wedge_count(client)
+        except HTTPException:
+            freeleech_wedges = None
 
     def flatten(v):
         # {"8320":"John Steinbeck"} or JSON-string -> "John Steinbeck"
