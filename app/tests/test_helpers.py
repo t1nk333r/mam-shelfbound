@@ -163,3 +163,14 @@ def test_qb_tags():
     assert main.TRANSMISSION_NOSEND_LABEL in tags
     # audiobook, kindle on -> just the mamid tag (no nosend)
     assert main.TRANSMISSION_NOSEND_LABEL not in main.qb_tags("1", main.MEDIA_TYPE_AUDIOBOOK, True)
+
+
+def test_engine_is_pointed_at_a_temp_database():
+    # conftest must FORCE the test DB. If this ever regresses to setdefault, a
+    # developer with HISTORY_DB_URL exported would have the suite mutate their
+    # real database at import time (ensure_history_schema rewrites rows).
+    import tempfile
+
+    url = str(main.engine.url)
+    assert tempfile.gettempdir() in url
+    assert "/data/history.db" not in url
