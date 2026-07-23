@@ -148,3 +148,18 @@ def test_default_send_to_kindle_defaults_to_nosend():
     assert main.default_send_to_kindle(None) is False   # new default: no-send
     assert main.default_send_to_kindle(True) is True
     assert main.default_send_to_kindle(False) is False
+
+
+def test_get_torrent_client_selects_backend(monkeypatch):
+    monkeypatch.setattr(main.settings, "TORRENT_CLIENT", "transmission")
+    assert type(main.get_torrent_client()).__name__ == "TransmissionClient"
+    monkeypatch.setattr(main.settings, "TORRENT_CLIENT", "qbittorrent")
+    assert type(main.get_torrent_client()).__name__ == "QbittorrentClient"
+
+
+def test_qb_tags():
+    tags = main.qb_tags("123", main.MEDIA_TYPE_EBOOK, send_to_kindle=False)
+    assert "mamid=123" in tags
+    assert main.TRANSMISSION_NOSEND_LABEL in tags
+    # audiobook, kindle on -> just the mamid tag (no nosend)
+    assert main.TRANSMISSION_NOSEND_LABEL not in main.qb_tags("1", main.MEDIA_TYPE_AUDIOBOOK, True)

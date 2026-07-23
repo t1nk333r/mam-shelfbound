@@ -10,6 +10,13 @@ services:
       TRANSMISSION_URL: "http://transmission:9091/transmission/rpc"
       TRANSMISSION_USER: ""
       TRANSMISSION_PASS: ""
+      # Download client: "transmission" (default) or "qbittorrent"
+      TORRENT_CLIENT: "transmission"
+      # qBittorrent settings (used when TORRENT_CLIENT=qbittorrent)
+      QB_URL: "http://qbittorrent:8080"
+      QB_USER: ""
+      QB_PASS: ""
+      QB_CATEGORY: "mam-audiofinder"
     volumes:
       - /path/to/appdata-for-db:/data
       # Use one shared media root so audiobook imports can hardlink from /downloads to /library.

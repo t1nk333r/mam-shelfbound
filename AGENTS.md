@@ -54,3 +54,4 @@
   - Transmission downloads must be mounted at `/downloads`.
   - The Audiobookshelf library must be mounted at `/library`.
   - Configure host paths in `docker-compose.yml`, not through app env vars.
+- The download client is selected by `TORRENT_CLIENT` (`transmission` default, or `qbittorrent`). Both clients import from the same `/downloads` mount inside the app container.

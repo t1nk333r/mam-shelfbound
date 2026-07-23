@@ -54,7 +54,16 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 | `TRANSMISSION_URL` | Transmission RPC URL |
 | `TRANSMISSION_USER` | Transmission RPC username |
 | `TRANSMISSION_PASS` | Transmission RPC password |
+| `TORRENT_CLIENT` | Download client: `transmission` (default) or `qbittorrent` |
+| `QB_URL` | qBittorrent Web UI URL (used when `TORRENT_CLIENT=qbittorrent`) |
+| `QB_USER` | qBittorrent Web UI username |
+| `QB_PASS` | qBittorrent Web UI password |
+| `QB_CATEGORY` | qBittorrent category applied to adds and used to find completed downloads (default `mam-audiofinder`) |
+| `QB_TAGS` | Extra comma-separated qBittorrent tags applied to adds, in addition to the `mamid=` tag |
 
+### Download client
+
+`TORRENT_CLIENT` selects which download client the app talks to: `transmission` (default) or `qbittorrent`. When set to `qbittorrent`, set `QB_URL`, `QB_USER`, and `QB_PASS`, and optionally `QB_CATEGORY` (default `mam-audiofinder`) and `QB_TAGS`. qBittorrent's completed downloads must be visible at `/downloads` inside the app container — the same shared-mount requirement as Transmission — and downloads and the audiobook library must share one filesystem for hardlinks to work.
 
 ## Notes
 
