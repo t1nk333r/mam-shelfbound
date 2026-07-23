@@ -16,7 +16,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Syntax check
+        run: python -m py_compile app/main.py
+      - name: Run tests
+        run: cd app && python -m pytest -q
+
   docker:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
