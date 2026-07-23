@@ -608,17 +608,7 @@ async def retry_history_import(history_id: int):
 async def list_completed_torrents() -> list[dict]:
     async with httpx.AsyncClient(timeout=30) as c:
         args = await transmission_rpc(c, "torrent-get", {
-            "fields": [
-                "id",
-                "hashString",
-                "name",
-                "percentDone",
-                "downloadDir",
-                "totalSize",
-                "addedDate",
-                "labels",
-                "files",
-            ],
+            "fields": ["hashString", "percentDone", "labels"],
         })
         infos = args.get("torrents") or []
 
@@ -628,27 +618,10 @@ async def list_completed_torrents() -> list[dict]:
                 continue
             if float(t.get("percentDone") or 0) < 1:
                 continue
-
             h = t.get("hashString")
             if not h:
                 continue
-            files = t.get("files") or []
-            # compute top-level root (before first '/')
-            roots = set()
-            for f in files:
-                name = (f.get("name") or "").lstrip("/")
-                roots.add(name.split("/", 1)[0])
-            root = (list(roots)[0] if roots else t.get("name") or "")
-            single_file = len(files) == 1 and "/" not in (files[0].get("name") or "")
-            out.append({
-                "hash": h,
-                "name": t.get("name"),
-                "download_dir": t.get("downloadDir"),
-                "root": root,
-                "single_file": single_file,
-                "size": t.get("totalSize"),
-                "added_on": t.get("addedDate"),
-            })
+            out.append({"hash": h})
         return out
 
 # ---------------------------- Perform Import ----------------------------
