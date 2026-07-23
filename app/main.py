@@ -617,7 +617,10 @@ async def list_completed_torrents() -> list[dict]:
 
 def sanitize(name: str) -> str:
     s = name.strip().replace(":", " -").replace("\\", "﹨").replace("/", "﹨")
-    return re.sub(r"\s+", " ", s)[:200] or "Unknown"
+    s = re.sub(r"\s+", " ", s)[:200]
+    if s in (".", ".."):
+        return "Unknown"
+    return s or "Unknown"
 
 def next_available(path: Path) -> Path:
     if not path.exists():
@@ -778,6 +781,21 @@ def is_transient_auto_import_error(exc: HTTPException) -> bool:
     detail = str(exc.detail)
     return exc.status_code == 502 and detail.startswith("Transmission")
 
+def safe_child_path(root: Path, name: str) -> Path:
+    """Join `name` onto `root` and confirm the result stays within `root`.
+
+    Rejects absolute names and any that traverse outside `root` via '..'.
+    Raises HTTPException(400) on violation.
+    """
+    if os.path.isabs(name) or ".." in Path(name).parts:
+        raise HTTPException(status_code=400, detail=f"Unsafe path in torrent contents: {name!r}")
+    candidate = root / name
+    root_resolved = root.resolve()
+    candidate_resolved = candidate.resolve()
+    if root_resolved != candidate_resolved and root_resolved not in candidate_resolved.parents:
+        raise HTTPException(status_code=400, detail=f"Unsafe path in torrent contents: {name!r}")
+    return candidate
+
 async def import_torrent_to_library(author: str, title: str, h: str, media_type: str = MEDIA_TYPE_AUDIOBOOK, send_to_kindle: bool = True) -> str:
     media_type = normalize_media_type(media_type)
     author = sanitize(author)
@@ -805,9 +823,9 @@ async def import_torrent_to_library(author: str, title: str, h: str, media_type:
         lib = Path(settings.EBOOKS_DIR if send_to_kindle else settings.EBOOKS_NOSEND_DIR)
     else:
         lib = Path(settings.LIBRARY_DIR)
-    author_dir = lib / author
+    author_dir = safe_child_path(lib, author)
     author_dir.mkdir(parents=True, exist_ok=True)
-    dest_dir = next_available(author_dir / title)
+    dest_dir = next_available(safe_child_path(author_dir, title))
 
     names = [(f.get("name") or "").lstrip("/") for f in files if f.get("name")]
     roots = {name.split("/", 1)[0] for name in names if "/" in name}
@@ -819,14 +837,14 @@ async def import_torrent_to_library(author: str, title: str, h: str, media_type:
     imported = 0
     try:
         if len(names) == 1:
-            src = source_dir / names[0]
+            src = safe_child_path(source_dir, names[0])
             if src.suffix.lower() == ".cue":
                 raise HTTPException(status_code=400, detail="Only .cue file found; nothing to import")
-            import_one(src, dest_dir / src.name)
+            import_one(src, safe_child_path(dest_dir, src.name))
             imported += 1
         else:
             for name in names:
-                src = source_dir / name
+                src = safe_child_path(source_dir, name)
                 if src.suffix.lower() == ".cue":
                     continue
                 rel_name = name
@@ -834,7 +852,7 @@ async def import_torrent_to_library(author: str, title: str, h: str, media_type:
                     rel_name = name[len(common_root) + 1:]
                 if not rel_name:
                     continue
-                import_one(src, dest_dir / rel_name)
+                import_one(src, safe_child_path(dest_dir, rel_name))
                 imported += 1
     except Exception:
         if dest_dir.exists():

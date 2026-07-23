@@ -34,6 +34,31 @@ def test_sanitize_strips_separators():
     assert main.sanitize("Title: Subtitle") == "Title - Subtitle"
 
 
+def test_safe_child_path_allows_normal_names(tmp_path):
+    root = tmp_path
+    assert main.safe_child_path(root, "book.m4b") == root / "book.m4b"
+    assert main.safe_child_path(root, "Author/book.m4b") == root / "Author/book.m4b"
+
+
+def test_safe_child_path_rejects_traversal(tmp_path):
+    with pytest.raises(HTTPException):
+        main.safe_child_path(tmp_path, "../evil")
+    with pytest.raises(HTTPException):
+        main.safe_child_path(tmp_path, "a/../../evil")
+    with pytest.raises(HTTPException):
+        main.safe_child_path(tmp_path, "/etc/passwd")
+
+
+def test_sanitize_rejects_dot_components():
+    # Bare dot components would escape the library root once joined.
+    assert main.sanitize("..") == "Unknown"
+    assert main.sanitize(".") == "Unknown"
+    assert main.sanitize("  ..  ") == "Unknown"
+    # ...but these are ordinary names and must survive.
+    assert main.sanitize("...") == "..."
+    assert main.sanitize("Vol. 2") == "Vol. 2"
+
+
 def test_next_available(tmp_path):
     p = tmp_path / "Book"
     assert main.next_available(p) == p  # does not exist yet
