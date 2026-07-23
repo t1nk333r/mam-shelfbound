@@ -1,0 +1,28 @@
+# VCS & CI
+.git
+.gitignore
+.github/
+
+# Advisor plans & docs (not needed in the image)
+plans/
+advisor-plans/
+*.md
+icon.png
+
+# Compose file (image is built from Dockerfile, not compose)
+docker-compose.yml
+
+# Local runtime junk
+__pycache__/
+*.pyc
+*.db
+.env
+/data/
+
+# Screenshot assets referenced only by README, not served at runtime
+app/static/screenshots/
+
+# Test scaffolding (not needed at runtime; plan 001 has landed so these exist)
+app/tests/
+app/conftest.py
+requirements-dev.txt
