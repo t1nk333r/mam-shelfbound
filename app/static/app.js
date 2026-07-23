@@ -14,6 +14,14 @@ const historyCard = document.getElementById('historyCard');
 const historyTable = document.getElementById('history');
 const historyBody = historyTable.querySelector('tbody');
 const historyColumnCount = historyTable.querySelector('thead tr').children.length;
+const filterRow = document.getElementById('filterRow');
+const filterFormatInput = document.getElementById('filterFormat');
+const filterMinSeedersInput = document.getElementById('filterMinSeeders');
+const filterFreeleechInput = document.getElementById('filterFreeleech');
+const clearFiltersBtn = document.getElementById('clearFilters');
+
+let lastResults = [];              // raw results from the most recent search
+let historyMamIds = new Map();     // mam_id -> torrent_status, for the "in history" badge
 
 function showHistoryCard() {
   historyCard.style.display = 'block';
@@ -79,6 +87,20 @@ if (form) {
   });
 }
 
+// ---------- Filter controls ----------
+[filterFormatInput, filterMinSeedersInput, filterFreeleechInput].forEach((el) => {
+  if (el) el.addEventListener('input', () => { if (lastResults.length) renderResults(); });
+});
+
+if (clearFiltersBtn) {
+  clearFiltersBtn.addEventListener('click', () => {
+    if (filterFormatInput) filterFormatInput.value = '';
+    if (filterMinSeedersInput) filterMinSeedersInput.value = '';
+    if (filterFreeleechInput) filterFreeleechInput.checked = false;
+    if (lastResults.length) renderResults();
+  });
+}
+
 // ---------- Search flow ----------
 async function runSearch() {
   const text = (q?.value || '').trim();
@@ -98,72 +120,111 @@ async function runSearch() {
 
     setAccountStatus(data?.freeleech_wedges);
 
-    const rows = data.results || [];
-    if (!rows.length) {
+    lastResults = data.results || [];
+    if (!lastResults.length) {
+      filterRow.hidden = true;
       statusEl.textContent = 'No results.';
       return;
     }
 
-    rows.forEach((it) => {
-      const tr = document.createElement('tr');
-      const detailsURL = it.id ? `https://www.myanonamouse.net/t/${encodeURIComponent(it.id)}` : '';
-      const addBtn = document.createElement('button');
-      addBtn.textContent = 'Add';
-      addBtn.disabled = !(it.dl || it.id);
-      addBtn.addEventListener('click', async () => {
-        addBtn.disabled = true;
-        addBtn.textContent = 'Adding...';
-        try {
-          const result = await fetchJson('/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              id: String(it.id ?? ''),
-              title: it.title || '',
-              dl: it.dl || '',
-              author: it.author_info || '',
-              narrator: it.narrator_info || '',
-              media_type: it.media_type || mediaType,
-              send_to_kindle: normalizeMediaType(it.media_type || mediaType) !== 'ebook' || getSendToKindle()
-            })
-          });
-          setAccountStatus(result?.freeleech_wedges);
-          addBtn.textContent = 'Added';
-          await loadHistory();
-        } catch (e) {
-          console.error(e);
-          addBtn.textContent = 'Error';
-          addBtn.disabled = false;
-        }
-      });
-
-      tr.innerHTML = `
-        <td>${renderResultTitleCell(it)}</td>
-        <td>${escapeHtml(it.author_info || '')}</td>
-        <td>${escapeHtml(it.narrator_info || '')}</td>
-        <td>${escapeHtml(it.format || '')}</td>
-        <td class="right">${formatSize(it.size)}</td>
-        <td class="right">${escapeHtml(`${it.seeders ?? '-'} / ${it.leechers ?? '-'}`)}</td>
-        <td>${escapeHtml(it.added || '')}</td>
-        <td class="center">
-          ${detailsURL ? `<a href="${detailsURL}" target="_blank" rel="noopener noreferrer" title="Open on MAM">🔗</a>` : ''}
-        </td>
-        <td></td>
-      `;
-
-      applyDataLabels(table, tr);
-      const actionCell = tr.lastElementChild;
-      actionCell.appendChild(addBtn);
-      tbody.appendChild(tr);
-    });
-
-    table.style.display = '';
-    statusEl.textContent = `${rows.length} results shown`;
+    // Load history first so the "in history" badge can be rendered in one pass.
     await loadHistory();
+
+    filterRow.hidden = false;
+    renderResults();
   } catch (e) {
     console.error(e);
     statusEl.textContent = 'Search failed.';
   }
+}
+
+function currentFilters() {
+  return {
+    format: (filterFormatInput?.value || '').trim().toLowerCase(),
+    minSeeders: parseInt(filterMinSeedersInput?.value || '', 10),
+    freeleechOnly: !!filterFreeleechInput?.checked
+  };
+}
+
+function matchesFilters(item, f) {
+  if (f.format && !String(item.format || '').toLowerCase().includes(f.format)) return false;
+  if (Number.isFinite(f.minSeeders) && Number(item.seeders ?? 0) < f.minSeeders) return false;
+  if (f.freeleechOnly && !item.is_freeleech) return false;
+  return true;
+}
+
+function renderResults() {
+  const f = currentFilters();
+  const shown = lastResults.filter((it) => matchesFilters(it, f));
+
+  tbody.innerHTML = '';
+  shown.forEach((it) => tbody.appendChild(buildResultRow(it)));
+
+  table.style.display = shown.length ? '' : 'none';
+  statusEl.textContent = shown.length === lastResults.length
+    ? `${shown.length} results shown`
+    : `${shown.length} of ${lastResults.length} results shown`;
+}
+
+function buildResultRow(it) {
+  const mediaType = getSelectedMediaType();
+  const tr = document.createElement('tr');
+  const detailsURL = it.id ? `https://www.myanonamouse.net/t/${encodeURIComponent(it.id)}` : '';
+  const addBtn = document.createElement('button');
+  addBtn.textContent = 'Add';
+  addBtn.disabled = !(it.dl || it.id);
+  addBtn.addEventListener('click', async () => {
+    addBtn.disabled = true;
+    addBtn.textContent = 'Adding...';
+    try {
+      const result = await fetchJson('/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: String(it.id ?? ''),
+          title: it.title || '',
+          dl: it.dl || '',
+          author: it.author_info || '',
+          narrator: it.narrator_info || '',
+          media_type: it.media_type || mediaType,
+          send_to_kindle: normalizeMediaType(it.media_type || mediaType) !== 'ebook' || getSendToKindle()
+        })
+      });
+      setAccountStatus(result?.freeleech_wedges);
+      addBtn.textContent = 'Added';
+      await loadHistory();
+    } catch (e) {
+      console.error(e);
+      addBtn.textContent = 'Error';
+      addBtn.disabled = false;
+    }
+  });
+
+  tr.innerHTML = `
+    <td>${renderResultTitleCell(it)}${renderInHistoryBadge(it)}</td>
+    <td>${escapeHtml(it.author_info || '')}</td>
+    <td>${escapeHtml(it.narrator_info || '')}</td>
+    <td>${escapeHtml(it.format || '')}</td>
+    <td class="right">${formatSize(it.size)}</td>
+    <td class="right">${escapeHtml(`${it.seeders ?? '-'} / ${it.leechers ?? '-'}`)}</td>
+    <td>${escapeHtml(it.added || '')}</td>
+    <td class="center">
+      ${detailsURL ? `<a href="${detailsURL}" target="_blank" rel="noopener noreferrer" title="Open on MAM">🔗</a>` : ''}
+    </td>
+    <td></td>
+  `;
+
+  applyDataLabels(table, tr);
+  const actionCell = tr.lastElementChild;
+  actionCell.appendChild(addBtn);
+  return tr;
+}
+
+function renderInHistoryBadge(item) {
+  const status = historyMamIds.get(String(item?.id ?? ''));
+  if (!status) return '';
+  const label = status === 'import_failed' ? 'In history (failed)' : 'In history';
+  return `<div class="result-flags"><span class="result-badge result-badge-history">${escapeHtml(label)}</span></div>`;
 }
 
 function setAccountStatus(value) {
@@ -309,6 +370,11 @@ async function loadHistory() {
     historyBody.innerHTML = '';
 
     const items = j.items || [];
+    historyMamIds = new Map(
+      items
+        .filter((it) => it.mam_id)
+        .map((it) => [String(it.mam_id), it.torrent_status || 'added'])
+    );
     if (!items.length) {
       renderEmptyHistory();
       showHistoryCard();

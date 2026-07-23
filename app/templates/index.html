@@ -159,6 +159,13 @@
     @media (max-width: 420px) {
       select { flex-basis:100%; width:100%; }
     }
+    .filter-row[hidden] { display: none; }
+    .filter-row input[type="number"] { flex:0 0 8rem; min-width:0; padding:0.6rem 0.7rem; }
+    .result-badge-history {
+      color:var(--text-soft);
+      background:var(--bg-elevated);
+      border-color:var(--border);
+    }
   </style>
 {% endblock %}
 
@@ -188,6 +195,16 @@
     </select>
     <button id="searchBtn" type="submit">Search</button>
   </form>
+
+  <div id="filterRow" class="row filter-row" hidden>
+    <input id="filterFormat" type="text" placeholder="Filter format (e.g. M4B)" />
+    <input id="filterMinSeeders" type="number" min="0" placeholder="Min seeders" />
+    <label class="kindle-toggle" for="filterFreeleech">
+      <input id="filterFreeleech" type="checkbox" />
+      <span>Freeleech only</span>
+    </label>
+    <button id="clearFilters" type="button">Clear</button>
+  </div>
 
   <div id="accountStatus" class="muted status-line">Freeleech wedges: loading...</div>
   <div id="status" class="muted status-line"></div>
