@@ -695,6 +695,30 @@ class QbittorrentClient(TorrentClient):
         if r.status_code != 200 or "Ok" not in (r.text or ""):
             raise HTTPException(status_code=502, detail=f"qBittorrent login failed: {r.status_code}")
 
+    async def _find_added_hash(self, client: httpx.AsyncClient, mam_id: str,
+                               attempts: int = 5, delay: float = 0.5) -> str | None:
+        """Find the hash of a just-added torrent by its mamid tag.
+
+        qBittorrent's torrents/add returns no infohash and registers the torrent
+        asynchronously, so poll briefly. When several torrents share the tag,
+        prefer the most recently added one.
+        """
+        for attempt in range(attempts):
+            r = await client.get(
+                f"{settings.QB_URL}/api/v2/torrents/info",
+                params={"tag": f"mamid={mam_id}", "filter": "all"},
+            )
+            try:
+                arr = r.json()
+            except ValueError:
+                arr = []
+            if isinstance(arr, list) and arr:
+                newest = max(arr, key=lambda t: t.get("added_on") or 0)
+                return newest.get("hash")
+            if attempt < attempts - 1:
+                await asyncio.sleep(delay)
+        return None
+
     async def add_torrent(self, metainfo, mam_id, media_type, send_to_kindle):
         async with httpx.AsyncClient(timeout=60) as client:
             await self._login(client)
@@ -708,17 +732,7 @@ class QbittorrentClient(TorrentClient):
                 raise HTTPException(status_code=502, detail=f"qBittorrent add failed: {r.status_code} {r.text[:160]}")
             if not mam_id:
                 return None
-            info = await client.get(
-                f"{settings.QB_URL}/api/v2/torrents/info",
-                params={"tag": f"mamid={mam_id}", "filter": "all"},
-            )
-            try:
-                arr = info.json()
-            except ValueError:
-                return None
-            if isinstance(arr, list) and arr:
-                return arr[0].get("hash")
-            return None
+            return await self._find_added_hash(client, mam_id)
 
     async def completed_hashes(self):
         async with httpx.AsyncClient(timeout=30) as c:

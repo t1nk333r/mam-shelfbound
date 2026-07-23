@@ -174,3 +174,60 @@ def test_engine_is_pointed_at_a_temp_database():
     url = str(main.engine.url)
     assert tempfile.gettempdir() in url
     assert "/data/history.db" not in url
+
+
+def test_qb_find_added_hash_prefers_newest_and_retries():
+    import asyncio
+
+    class _Resp:
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    class _Client:
+        """Returns an empty list N times, then two torrents out of age order."""
+
+        def __init__(self, empties):
+            self.empties = empties
+            self.calls = 0
+
+        async def get(self, url, params=None):
+            self.calls += 1
+            if self.calls <= self.empties:
+                return _Resp([])
+            return _Resp([
+                {"hash": "OLDER", "added_on": 100},
+                {"hash": "NEWEST", "added_on": 900},
+            ])
+
+    client = _Client(empties=2)
+    got = asyncio.run(
+        main.QbittorrentClient()._find_added_hash(client, "42", attempts=5, delay=0)
+    )
+    assert got == "NEWEST"      # newest wins, not arr[0]
+    assert client.calls == 3    # retried past the two empty responses
+
+
+def test_qb_find_added_hash_gives_up_and_returns_none():
+    import asyncio
+
+    class _Resp:
+        def json(self):
+            return []
+
+    class _Client:
+        def __init__(self):
+            self.calls = 0
+
+        async def get(self, url, params=None):
+            self.calls += 1
+            return _Resp()
+
+    client = _Client()
+    got = asyncio.run(
+        main.QbittorrentClient()._find_added_hash(client, "42", attempts=3, delay=0)
+    )
+    assert got is None
+    assert client.calls == 3    # exhausted its attempts, no infinite loop
