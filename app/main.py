@@ -36,6 +36,22 @@ def is_truthy(value) -> bool:
         return value
     return str(value).strip().lower() in ("1", "true", "yes", "on")
 
+ALLOWED_PERPAGE = (25, 50, 100)
+
+def normalize_perpage(value) -> int:
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 25
+    return n if n in ALLOWED_PERPAGE else 25
+
+def validate_mam_id(mam_id: str) -> str:
+    # MAM torrent ids are numeric. Anything else could inject extra query
+    # parameters into the download URL (e.g. "&fl=1" spends a freeleech wedge).
+    if not re.fullmatch(r"[0-9]+", mam_id):
+        raise HTTPException(status_code=400, detail="Invalid MAM id")
+    return mam_id
+
 def build_mam_cookie(raw: str) -> str:
     raw = (raw or "").strip()
     if not raw:
@@ -232,7 +248,7 @@ async def search(payload: dict):
     tor.setdefault("startNumber", "0")
     tor["main_cat"] = [MAM_MAIN_CATEGORIES[media_type]]
 
-    perpage = payload.get("perpage", 25)
+    perpage = normalize_perpage(payload.get("perpage"))
     body = {"tor": tor, "perpage": perpage}
 
     headers = {
@@ -450,6 +466,7 @@ async def add_to_transmission(body: AddBody):
 
     if not mam_id:
         raise HTTPException(status_code=400, detail="Missing MAM id")
+    mam_id = validate_mam_id(mam_id)
 
     freeleech_wedges = None
     use_fl = False

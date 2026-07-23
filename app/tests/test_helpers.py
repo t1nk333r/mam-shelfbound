@@ -92,3 +92,26 @@ def test_torrent_hash_from_add_result():
     assert main.torrent_hash_from_add_result({"torrent-added": {"hashString": "AB"}}) == "AB"
     assert main.torrent_hash_from_add_result({"torrent-duplicate": {"hashString": "CD"}}) == "CD"
     assert main.torrent_hash_from_add_result({}) is None
+
+
+def test_normalize_perpage():
+    assert main.normalize_perpage(50) == 50
+    assert main.normalize_perpage("100") == 100
+    assert main.normalize_perpage(None) == 25      # missing -> default
+    assert main.normalize_perpage(999) == 25       # out of allowed set -> default
+    assert main.normalize_perpage("abc") == 25     # non-int -> default
+    assert main.normalize_perpage(-1) == 25
+
+
+def test_validate_mam_id_accepts_numeric():
+    assert main.validate_mam_id("12345") == "12345"
+    assert main.validate_mam_id("0") == "0"
+
+
+def test_validate_mam_id_rejects_query_injection():
+    # "&fl=1" would spend a freeleech wedge on an ebook add.
+    with pytest.raises(HTTPException):
+        main.validate_mam_id("12345&fl=1")
+    for bad in ["abc", "-1", "1.5", "1 2", "", "²", "١٢٣"]:
+        with pytest.raises(HTTPException):
+            main.validate_mam_id(bad)
