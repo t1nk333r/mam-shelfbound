@@ -28,9 +28,9 @@
 
 ## Testing Guidelines
 
-- There is no formal test suite yet.
+- Run the unit tests with `cd app && python -m pytest -q` before pushing.
 - When changing backend logic, at minimum:
-  - Hit `/health`, `/search`, `/add`, and `/history` manually in a dev environment.
+  - Hit `/search`, `/add`, `/account`, and `/history` manually in a dev environment, and exercise the `Retry` action (`POST /history/{id}/retry`) on a failed row.
   - Verify auto-import behavior with a completed torrent in Transmission.
 
 ## Commit & Pull Request Guidelines
