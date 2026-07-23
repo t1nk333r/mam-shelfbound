@@ -8,7 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from sqlalchemy import create_engine, text
-from datetime import datetime
+from datetime import datetime, timezone
+from contextlib import asynccontextmanager
 
 logger = logging.getLogger("mam_audiofinder")
 
@@ -106,7 +107,7 @@ HISTORY_DB_URL = os.getenv("HISTORY_DB_URL", "sqlite:////data/history.db")
 engine = create_engine(HISTORY_DB_URL, future=True)
 
 def utcnow_str() -> str:
-    return datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 def ensure_history_schema() -> None:
     with engine.begin() as cx:
@@ -209,7 +210,15 @@ def mam_account_is_authenticated(data: dict) -> bool:
     return uid is not None and str(uid).strip() != ""
 
 # ---------------------------- App ----------------------------
-app = FastAPI(title="MAM Book Finder", version=APP_VERSION)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await reconcile_auto_import_task()
+    try:
+        yield
+    finally:
+        await stop_auto_import_task()
+
+app = FastAPI(title="MAM Book Finder", version=APP_VERSION, lifespan=lifespan)
 app.state.auto_import_task = None
 app.state.auto_import_stop = None
 
@@ -966,10 +975,3 @@ async def reconcile_auto_import_task():
         app.state.auto_import_stop = stop_event
         app.state.auto_import_task = asyncio.create_task(auto_import_loop(stop_event))
 
-@app.on_event("startup")
-async def startup_event():
-    await reconcile_auto_import_task()
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    await stop_auto_import_task()
