@@ -249,3 +249,32 @@ def test_qb_find_added_hash_gives_up_and_returns_none():
     )
     assert got is None
     assert client.calls == 3    # exhausted its attempts, no infinite loop
+
+
+def test_format_failure_message_with_and_without_author():
+    msg = main.format_failure_message({"title": "Dune", "author": "Frank Herbert"}, "disk full")
+    assert "Dune by Frank Herbert" in msg
+    assert "disk full" in msg
+    # missing author, and a completely absent row, must not raise
+    assert "Dune" in main.format_failure_message({"title": "Dune", "author": ""}, "x")
+    assert "Unknown title" in main.format_failure_message(None, None)
+
+
+def test_schedule_failure_notification_is_a_noop_without_config(monkeypatch):
+    monkeypatch.setattr(main.settings, "NOTIFY_WEBHOOK_URL", "")
+    main.schedule_failure_notification("anything")
+    assert not main._notification_tasks
+
+
+def test_schedule_failure_notification_is_a_noop_without_event_loop(monkeypatch):
+    monkeypatch.setattr(main.settings, "NOTIFY_WEBHOOK_URL", "http://example.invalid/hook")
+    main.schedule_failure_notification("anything")
+    assert not main._notification_tasks
+
+
+def test_send_failure_notification_swallows_transport_errors(monkeypatch):
+    import asyncio
+
+    monkeypatch.setattr(main.settings, "NOTIFY_WEBHOOK_URL", "http://127.0.0.1:1/hook")
+    monkeypatch.setattr(main.settings, "NOTIFY_TIMEOUT", 1)
+    asyncio.run(main.send_failure_notification("boom"))  # must simply return

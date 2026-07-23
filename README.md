@@ -61,6 +61,7 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 | `QB_CATEGORY` | qBittorrent category applied to adds and used to find completed downloads (default `mam-audiofinder`) |
 | `QB_TAGS` | Extra comma-separated qBittorrent tags applied to adds, in addition to the `mamid=` tag |
 | `FL_WEDGE_MIN_RESERVE` | Keep this many freeleech wedges unspent (0 = spend freely) |
+| `NOTIFY_WEBHOOK_URL` | Optional webhook for import-failure notifications (empty = disabled) |
 
 ### Download client
 
@@ -73,6 +74,7 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 - Failed imports show `Failure` in history and can be retried with the row's `Retry` button after fixing the underlying path, mount, or permission issue.
 - The app has no authentication, so do not expose it directly to the public internet.
 - Freeleech wedges are spent automatically on audiobook adds. Set `FL_WEDGE_MIN_RESERVE` to keep a reserve — with `5`, the app stops using wedges once your balance reaches 5 and adds normally instead. The default `0` spends whenever any are available.
+- Set `NOTIFY_WEBHOOK_URL` to receive a plain-text message whenever an import fails — for example an [ntfy](https://ntfy.sh) topic URL. Leave it empty to disable notifications. Delivery is best-effort: a webhook that is down is logged and ignored, never retried, and never affects the import itself.
 
 ## License
 

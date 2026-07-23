@@ -20,6 +20,9 @@ services:
       # Stop auto-spending freeleech wedges once the balance drops to this many.
       # 0 (default) = spend whenever any are available.
       FL_WEDGE_MIN_RESERVE: "0"
+      # Optional: POST a plain-text message here when an import fails.
+      # Works with ntfy (https://ntfy.sh/your-topic) and Gotify. Empty = disabled.
+      NOTIFY_WEBHOOK_URL: ""
     volumes:
       - /path/to/appdata-for-db:/data
       # Use one shared media root so audiobook imports can hardlink from /downloads to /library.

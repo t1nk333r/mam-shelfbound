@@ -24,6 +24,7 @@ DEFAULT_TRANSMISSION_LABEL = "mam-audiofinder"
 TRANSMISSION_NOSEND_LABEL = "kindle-nosend"
 DEFAULT_UMASK = "0002"
 DEFAULT_QB_CATEGORY = "mam-audiofinder"
+DEFAULT_NOTIFY_TIMEOUT = 10
 MEDIA_TYPE_AUDIOBOOK = "audiobook"
 MEDIA_TYPE_EBOOK = "ebook"
 MAM_MAIN_CATEGORIES = {
@@ -113,6 +114,8 @@ class Settings:
             self.FL_WEDGE_MIN_RESERVE = max(0, int(os.getenv("FL_WEDGE_MIN_RESERVE", "0")))
         except ValueError:
             raise RuntimeError("FL_WEDGE_MIN_RESERVE must be a non-negative integer")
+        self.NOTIFY_WEBHOOK_URL = os.getenv("NOTIFY_WEBHOOK_URL", "").strip()
+        self.NOTIFY_TIMEOUT = DEFAULT_NOTIFY_TIMEOUT
         self.DOWNLOADS_DIR = DOWNLOADS_DIR
         self.LIBRARY_DIR = LIBRARY_DIR
         self.EBOOKS_DIR = EBOOKS_DIR
@@ -890,9 +893,57 @@ def mark_history_imported(history_id: int | None, torrent_hash: str):
                 WHERE torrent_hash = :torrent_hash
             """), {"ts": ts, "torrent_hash": torrent_hash})
 
+_notification_tasks: set = set()
+
+
+async def send_failure_notification(message: str) -> None:
+    """POST a plain-text failure message to the configured webhook.
+
+    Never raises: a notification problem must not affect an import.
+    """
+    url = settings.NOTIFY_WEBHOOK_URL
+    if not url:
+        return
+    try:
+        async with httpx.AsyncClient(timeout=settings.NOTIFY_TIMEOUT) as client:
+            await client.post(
+                url,
+                content=message.encode("utf-8"),
+                headers={"Content-Type": "text/plain; charset=utf-8"},
+            )
+    except Exception:
+        logger.warning("Could not deliver failure notification", exc_info=True)
+
+
+def schedule_failure_notification(message: str) -> None:
+    """Fire-and-forget the notification from synchronous code.
+
+    No-ops when notifications are unconfigured or no event loop is running
+    (e.g. under pytest), so callers never need to care.
+    """
+    if not settings.NOTIFY_WEBHOOK_URL:
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    task = loop.create_task(send_failure_notification(message))
+    # Hold a reference: bare tasks can be garbage-collected before they finish.
+    _notification_tasks.add(task)
+    task.add_done_callback(_notification_tasks.discard)
+
+
+def format_failure_message(row, detail: str | None) -> str:
+    title = ((row or {}).get("title") or "").strip() or "Unknown title"
+    author = ((row or {}).get("author") or "").strip()
+    label = f"{title} by {author}" if author else title
+    return f"Import failed: {label}\n{detail or 'No detail recorded.'}"
+
+
 def mark_history_failed(history_id: int | None, torrent_hash: str, detail: str):
+    cleaned = clean_status_detail(detail)
     with engine.begin() as cx:
-        params = {"detail": clean_status_detail(detail)}
+        params = {"detail": cleaned}
         if history_id is not None:
             params["id"] = history_id
             cx.execute(text("""
@@ -903,6 +954,9 @@ def mark_history_failed(history_id: int | None, torrent_hash: str, detail: str):
                     status_updated_at = :ts
                 WHERE id = :id
             """), {"ts": utcnow_str(), **params})
+            row = cx.execute(text(
+                "SELECT title, author FROM history WHERE id = :id"
+            ), {"id": history_id}).mappings().first()
         else:
             params["torrent_hash"] = torrent_hash
             cx.execute(text("""
@@ -913,6 +967,11 @@ def mark_history_failed(history_id: int | None, torrent_hash: str, detail: str):
                     status_updated_at = :ts
                 WHERE torrent_hash = :torrent_hash
             """), {"ts": utcnow_str(), **params})
+            row = cx.execute(text(
+                "SELECT title, author FROM history WHERE torrent_hash = :torrent_hash"
+            ), {"torrent_hash": torrent_hash}).mappings().first()
+
+    schedule_failure_notification(format_failure_message(row, cleaned))
 
 def get_auto_import_candidates(completed_hashes: set[str]) -> list[dict]:
     if not completed_hashes:
