@@ -154,6 +154,16 @@ def ensure_history_schema() -> None:
             SET status_updated_at = COALESCE(status_updated_at, imported_at, added_at)
             WHERE status_updated_at IS NULL
         """))
+        # A row can only be 'importing' if a previous process died mid-import;
+        # reset it so the auto-import poller retries it.
+        cx.execute(text("""
+            UPDATE history
+            SET
+                torrent_status = 'added',
+                status_detail = NULL,
+                status_updated_at = datetime('now')
+            WHERE torrent_status = 'importing'
+        """))
 
 ensure_history_schema()
 

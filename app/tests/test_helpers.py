@@ -115,3 +115,30 @@ def test_validate_mam_id_rejects_query_injection():
     for bad in ["abc", "-1", "1.5", "1 2", "", "²", "١٢٣"]:
         with pytest.raises(HTTPException):
             main.validate_mam_id(bad)
+
+
+def test_ensure_history_schema_resets_stale_importing():
+    from sqlalchemy import text
+
+    try:
+        with main.engine.begin() as cx:
+            cx.execute(text("""
+                INSERT INTO history (mam_id, title, author, media_type, torrent_status, torrent_hash, status_detail)
+                VALUES ('t012', 'T', 'A', 'audiobook', 'importing', 'HASH_STALE_012', 'stale detail')
+            """))
+
+        main.ensure_history_schema()
+
+        with main.engine.begin() as cx:
+            row = cx.execute(text("""
+                SELECT torrent_status, status_detail
+                FROM history
+                WHERE torrent_hash = 'HASH_STALE_012'
+            """)).mappings().first()
+
+        assert row is not None
+        assert row["torrent_status"] == "added"
+        assert row["status_detail"] is None
+    finally:
+        with main.engine.begin() as cx:
+            cx.execute(text("DELETE FROM history WHERE torrent_hash = 'HASH_STALE_012'"))
