@@ -54,6 +54,19 @@ def validate_mam_id(mam_id: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid MAM id")
     return mam_id
 
+def should_use_freeleech(media_type: str, wedges: int | None, reserve: int) -> bool:
+    """Decide whether to spend a freeleech wedge on this add.
+
+    Freeleech is audiobook-only (commit 92c95a3). Above that, a wedge is spent
+    only while the balance is strictly greater than the configured reserve, so
+    a reserve of 0 keeps the historical "spend whenever you have one" behavior.
+    """
+    if media_type != MEDIA_TYPE_AUDIOBOOK:
+        return False
+    if not wedges:
+        return False
+    return wedges > reserve
+
 def build_mam_cookie(raw: str) -> str:
     raw = (raw or "").strip()
     if not raw:
@@ -96,6 +109,10 @@ class Settings:
         self.QB_PASS = os.getenv("QB_PASS", "")
         self.QB_CATEGORY = os.getenv("QB_CATEGORY", DEFAULT_QB_CATEGORY)
         self.QB_TAGS = os.getenv("QB_TAGS", "")
+        try:
+            self.FL_WEDGE_MIN_RESERVE = max(0, int(os.getenv("FL_WEDGE_MIN_RESERVE", "0")))
+        except ValueError:
+            raise RuntimeError("FL_WEDGE_MIN_RESERVE must be a non-negative integer")
         self.DOWNLOADS_DIR = DOWNLOADS_DIR
         self.LIBRARY_DIR = LIBRARY_DIR
         self.EBOOKS_DIR = EBOOKS_DIR
@@ -507,7 +524,7 @@ async def add_to_transmission(body: AddBody):
     used_fl = False
     async with httpx.AsyncClient(timeout=30) as status_client:
         freeleech_wedges = await fetch_freeleech_wedge_count(status_client)
-        use_fl = media_type == MEDIA_TYPE_AUDIOBOOK and bool(freeleech_wedges and freeleech_wedges > 0)
+        use_fl = should_use_freeleech(media_type, freeleech_wedges, settings.FL_WEDGE_MIN_RESERVE)
 
     async with httpx.AsyncClient(timeout=60) as client:
         candidate_urls = [f"{settings.MAM_BASE}/tor/download.php?tid={mam_id}"]

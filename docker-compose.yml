@@ -17,6 +17,9 @@ services:
       QB_USER: ""
       QB_PASS: ""
       QB_CATEGORY: "mam-audiofinder"
+      # Stop auto-spending freeleech wedges once the balance drops to this many.
+      # 0 (default) = spend whenever any are available.
+      FL_WEDGE_MIN_RESERVE: "0"
     volumes:
       - /path/to/appdata-for-db:/data
       # Use one shared media root so audiobook imports can hardlink from /downloads to /library.

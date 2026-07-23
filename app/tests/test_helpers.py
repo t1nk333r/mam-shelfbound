@@ -117,6 +117,24 @@ def test_validate_mam_id_rejects_query_injection():
             main.validate_mam_id(bad)
 
 
+def test_should_use_freeleech_respects_reserve_and_media_type():
+    AB = main.MEDIA_TYPE_AUDIOBOOK
+    EB = main.MEDIA_TYPE_EBOOK
+
+    # reserve 0 reproduces the historical behavior: spend whenever any exist
+    assert main.should_use_freeleech(AB, 1, 0) is True
+    assert main.should_use_freeleech(AB, 0, 0) is False
+    assert main.should_use_freeleech(AB, None, 0) is False
+
+    # a reserve holds the last N back
+    assert main.should_use_freeleech(AB, 6, 5) is True
+    assert main.should_use_freeleech(AB, 5, 5) is False   # at the reserve, stop
+    assert main.should_use_freeleech(AB, 2, 5) is False   # below it, stop
+
+    # ebooks never spend a wedge, whatever the balance
+    assert main.should_use_freeleech(EB, 99, 0) is False
+
+
 def test_ensure_history_schema_resets_stale_importing():
     from sqlalchemy import text
 
