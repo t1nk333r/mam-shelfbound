@@ -142,3 +142,9 @@ def test_ensure_history_schema_resets_stale_importing():
     finally:
         with main.engine.begin() as cx:
             cx.execute(text("DELETE FROM history WHERE torrent_hash = 'HASH_STALE_012'"))
+
+
+def test_default_send_to_kindle_defaults_to_nosend():
+    assert main.default_send_to_kindle(None) is False   # new default: no-send
+    assert main.default_send_to_kindle(True) is True
+    assert main.default_send_to_kindle(False) is False

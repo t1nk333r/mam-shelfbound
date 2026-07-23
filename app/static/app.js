@@ -33,7 +33,7 @@ function mediaTypeLabel(value) {
 }
 
 function getSendToKindle() {
-  return sendToKindleInput ? sendToKindleInput.checked : true;
+  return sendToKindleInput ? sendToKindleInput.checked : false;
 }
 
 function renderMediaTypeBadge(value, sendToKindle = true) {

@@ -73,6 +73,10 @@ def normalize_media_type(value: str | None) -> str:
         return MEDIA_TYPE_EBOOK
     raise HTTPException(status_code=400, detail="media_type must be audiobook or ebook")
 
+def default_send_to_kindle(value: bool | None) -> bool:
+    # Ebooks default to no-send; the user opts in by enabling "Send to Kindle".
+    return False if value is None else bool(value)
+
 class Settings:
     def __init__(self) -> None:
         self.MAM_BASE = DEFAULT_MAM_BASE
@@ -482,7 +486,7 @@ async def add_to_transmission(body: AddBody):
     author = (body.author or "").strip()
     narrator = (body.narrator or "").strip()
     media_type = normalize_media_type(body.media_type)
-    send_to_kindle = True if body.send_to_kindle is None else bool(body.send_to_kindle)
+    send_to_kindle = default_send_to_kindle(body.send_to_kindle)
     dl = (body.dl or "").strip()
 
     if not mam_id:

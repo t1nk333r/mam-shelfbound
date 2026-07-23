@@ -14,8 +14,8 @@ Lightweight web app and API for searching MyAnonamouse, sending downloads to Tra
 - Add torrents to Transmission with a dedicated label
 - Track download history
 - Auto-import completed audiobooks into `/library` using hardlinks
-- Auto-import completed ebooks into `/ebooks` using copies
-- Optionally import ebooks into `/ebooks-nosend` when `Send to Kindle` is unchecked
+- Auto-import completed ebooks into `/ebooks-nosend` (default) or `/ebooks` (when `Send to Kindle` is checked) using copies
+- Import ebooks into `/ebooks-nosend` by default; check `Send to Kindle` before adding to import into `/ebooks` instead
 
 ## Requirements
 
@@ -59,7 +59,7 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 ## Notes
 
 - Search, add, and history are available from the main UI.
-- The `Send to Kindle` ebook toggle defaults on. When unchecked, new ebook adds are tagged `kindle-nosend` in Transmission and imported into `/ebooks-nosend`.
+- The `Send to Kindle` ebook toggle defaults **off**: new ebook adds are tagged `kindle-nosend` in Transmission and imported into `/ebooks-nosend`. Check `Send to Kindle` before adding to send the ebook to Kindle and import it into `/ebooks` instead.
 - Failed imports show `Failure` in history and can be retried with the row's `Retry` button after fixing the underlying path, mount, or permission issue.
 - The app has no authentication, so do not expose it directly to the public internet.
 
