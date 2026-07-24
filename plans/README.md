@@ -37,8 +37,11 @@ commit messages are short and present-tense with no prefixes.
 | 017 | Import failure notifications (webhook) | P3 | M | — | DONE |
 | 018 | Freeleech wedge reserve (`FL_WEDGE_MIN_RESERVE`) | P3 | S | — | DONE |
 | 019 | **DESIGN**: decide how/whether to authenticate | P3 | M | — | DONE |
+| 020 | **DESIGN**: runtime configuration architecture (review only) | P3 | M (design) | 019 | REVIEW |
+| 021 | **ADR**: author docs/adr/0002-configuration-philosophy.md | P3 | S (design) | 019, 020 | DONE |
+| 022 | CI: bump actions off deprecated Node 20 | P3 | S | — | DONE |
 
-Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale)
+Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale) | REVIEW (design deliverable, no code to execute)
 
 ## Post-implementation audit (2026-07-24, branch `advisor/plans-001-012` @ `57c0af6`)
 
