@@ -177,7 +177,12 @@ git rm app/static/common.js
 Machine-checkable. ALL must hold:
 
 - [ ] `python3 -m py_compile app/main.py` exits 0
-- [ ] `grep -n "single_file\|added_on\|download_dir" app/main.py` returns no matches
+- [ ] `grep -n 'single_file\|added_on\|"download_dir"' app/main.py` returns no matches
+      (**note**: match the *quoted dict key* `"download_dir"`, not the bare word.
+      `import_torrent_to_library` has an unrelated local variable also called
+      `download_dir` which is explicitly out of scope and must survive — an
+      earlier revision of this criterion used the bare word and wrongly implied
+      that code should be deleted.)
 - [ ] `grep -rn "common.js" app/` returns no matches
 - [ ] `app/static/common.js` no longer exists
 - [ ] `cd app && python -m pytest -q` exits 0 (if plan 001 landed)

@@ -271,7 +271,7 @@ def test_torrent_hash_from_add_result():
     assert main.torrent_hash_from_add_result({}) is None
 ```
 
-**Verify**: `cd app && python -m pytest -q` → all tests pass (10 tests), exit 0.
+**Verify**: `cd app && python -m pytest -q` → all tests pass (9 tests), exit 0.
 
 ### Step 5: Add a `test` job to CI
 
@@ -312,7 +312,7 @@ is not a project dependency, only a local check.)
 
 ## Test plan
 
-- New file `app/tests/test_helpers.py` with the 10 tests above: happy paths plus
+- New file `app/tests/test_helpers.py` with the 9 tests above: happy paths plus
   the two `HTTPException`-raising cases (`normalize_media_type`,
   `validate_download_path`) and the 500-char truncation edge in
   `clean_status_detail`.
