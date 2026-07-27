@@ -168,6 +168,10 @@ def ensure_history_schema() -> None:
             cx.execute(text("ALTER TABLE history ADD COLUMN media_type TEXT"))
         if "send_to_kindle" not in cols:
             cx.execute(text("ALTER TABLE history ADD COLUMN send_to_kindle INTEGER DEFAULT 1"))
+        if "torrent_status" not in cols:
+            cx.execute(text("ALTER TABLE history ADD COLUMN torrent_status TEXT"))
+        if "torrent_hash" not in cols:
+            cx.execute(text("ALTER TABLE history ADD COLUMN torrent_hash TEXT"))
         cx.execute(text("""
             UPDATE history
             SET media_type = 'audiobook'
@@ -198,6 +202,12 @@ def ensure_history_schema() -> None:
                 status_updated_at = datetime('now')
             WHERE torrent_status = 'importing'
         """))
+        # Migration ledger. The block above is idempotent (CREATE IF NOT EXISTS +
+        # guarded ALTERs), so it is safe to run on every boot; user_version exists
+        # so a FUTURE, non-idempotent migration can be gated, e.g.:
+        #   if cx.exec_driver_sql("PRAGMA user_version").scalar() < 2:
+        #       cx.exec_driver_sql("<revision-2 migration>")
+        cx.exec_driver_sql("PRAGMA user_version = 1")
 
 ensure_history_schema()
 
