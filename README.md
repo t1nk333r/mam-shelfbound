@@ -62,6 +62,7 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 | `QB_TAGS` | Extra comma-separated qBittorrent tags applied to adds, in addition to the `mamid=` tag |
 | `FL_WEDGE_MIN_RESERVE` | Keep this many freeleech wedges unspent (0 = spend freely) |
 | `NOTIFY_WEBHOOK_URL` | Optional webhook for import-failure notifications (empty = disabled) |
+| `PORT` | Port the app listens on inside the container (default `8080`); set this to avoid a clash when sharing another container's network namespace |
 
 ### Download client
 
