@@ -85,7 +85,7 @@ shipped; in-app auth (deferred to reverse proxy, ADR-0001), bulk retry-all
 (rejected 2026-07-24), and re-adding `/health` (removed `fc9251e`) were **not**
 re-raised.
 
-**Execution log (2026-07-27), chained toward a v0.0.3 bundle — none merged to master yet:**
+**Execution log (2026-07-27) — chain executed, reviewed, merged, and released as v0.0.3:**
 - **023** — verdict **APPROVE**: done criteria re-run independently; regression
   test proven to fail on unpatched code, pass on patched; scope clean,
   additions-only. Commit `d511329`, branch `advisor/023-upgrade-safe-history-migrations`.
@@ -104,9 +104,9 @@ re-raised.
   `advisor/025-configurable-listen-port` — **this branch contains the full chain
   023 + 024 + 025** (worktree `agent-a2f334454a0ae229d`).
 
-**All three DONE and stacked on one branch (`advisor/025-…` @ `40585b0`), not
-merged to master.** Merging the chain (plus the separate uncommitted
-`index.html` History-table fix) is the v0.0.3 bundle — the maintainer's call.
+**All three merged to master and released as v0.0.3** (merge commit `46ef97d`,
+tag `v0.0.3`, 2026-07-30), together with the History-table layout fix. CI green
+(45 tests); image `ghcr.io/d7eeem/mam-audiofinder-transmission:v0.0.3` published.
 
 ## Post-implementation audit (2026-07-24, branch `advisor/plans-001-012` @ `57c0af6`)
 

@@ -1,5 +1,3 @@
-import sqlalchemy as sa
-
 import main
 
 
