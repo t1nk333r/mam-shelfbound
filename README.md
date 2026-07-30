@@ -44,6 +44,20 @@ The app exposes `/downloads` and `/library` as symlinks into `/storage/downloads
 
 If you use Transmission in Docker, mount the same host media root or downloads subdirectory there so completed paths still resolve under `/downloads`. Downloads and the audiobook library must live on the same filesystem; otherwise audiobook imports fail and the History table shows `Failure` with the hardlink error. Ebook imports continue to copy into `/ebooks` or `/ebooks-nosend`.
 
+### Run the published image
+
+The Quick Start above builds from source. To run a prebuilt image instead, set `image:` in `docker-compose.yml` and drop `--build`:
+
+```yaml
+services:
+  mam-audiofinder:
+    image: ghcr.io/d7eeem/mam-audiofinder-transmission-qbit:latest   # or pin a release, e.g. :v0.0.4
+```
+
+Release images are published to GitHub Container Registry at `ghcr.io/d7eeem/mam-audiofinder-transmission-qbit` on every tagged release.
+
+> **Note:** releases through `v0.0.3` were published under the repository's former name, at `ghcr.io/d7eeem/mam-audiofinder-transmission`. `v0.0.4` onward use the `-qbit` path above.
+
 ## Configuration
 
 Runtime config comes from environment variables in `docker-compose.yml`.
