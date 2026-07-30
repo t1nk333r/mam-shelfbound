@@ -39,9 +39,74 @@ commit messages are short and present-tense with no prefixes.
 | 019 | **DESIGN**: decide how/whether to authenticate | P3 | M | — | DONE |
 | 020 | **DESIGN**: runtime configuration architecture (review only) | P3 | M (design) | 019 | REVIEW |
 | 021 | **ADR**: author docs/adr/0002-configuration-philosophy.md | P3 | S (design) | 019, 020 | DONE |
-| 022 | CI: bump actions off deprecated Node 20 | P3 | S | — | DONE |
+| 022 | CI: bump actions off deprecated Node 20 (CI-validated, v0.0.2) | P3 | S | — | DONE |
+| 023 | Upgrade-safe history-schema migrations (guarded ALTERs + `user_version`) | P1 | M | — | DONE |
+| 024 | Startup preflight diagnostics (fatal DB-writability + fs warnings) | P2 | M | — | DONE |
+| 025 | Configurable listen port (`PORT` env, default 8080) | P3 | S | — | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale) | REVIEW (design deliverable, no code to execute)
+
+## Direction pass (2026-07-27) — plans 023-025
+
+Run via `next` (direction category only). Grounded in this session's **real
+production deployment** (TrueNAS + Dockge + gluetun + qBittorrent), which exposed
+operability gaps earlier passes could not see. Three of six surfaced options were
+selected and turned into implementation plans; recommended execution order:
+
+1. **023 — upgrade-safe migrations** (P1). Fixes the actual crash-loop hit in
+   prod: `ensure_history_schema()` adds `torrent_status`/`torrent_hash` only via
+   `CREATE TABLE`, so any reused/older/upstream `history` DB throws
+   `no such column: torrent_status` at import. Do this first — it is a real bug.
+2. **024 — startup preflight** (P2). Turns misconfig tracebacks (unwritable
+   `/data`, cross-filesystem `/downloads`↔`/library`) into one-line messages.
+   Independent of 023, but both edit the module-scope region near `main.py:202`
+   — expect a trivial merge if executed separately. Deliberately adds **no** HTTP
+   endpoint (the `/health` route was removed in `fc9251e`; see plan 005).
+3. **025 — configurable port** (P3). `PORT` env (default 8080) so shared-netns
+   (VPN-sidecar) deploys need no compose `command:` override. Dockerfile + README
+   only; fully independent — run anytime / in parallel.
+
+**Surfaced but NOT selected this pass** (recorded so they are not re-audited;
+available to plan on request):
+- **D4 — dynamic MAM session via mamapi handoff**: the app reads a static
+  `MAM_COOKIE` once (`main.py:98`); an optional `MAM_ID_FILE`, re-read from what
+  `mamapi` writes, would survive IP-rotation session refreshes. S-M. High fit for
+  stacks running mamapi.
+- **D5 — post-import library-scan trigger**: the import pipeline ends at
+  hardlink-into-`/library` (`main.py:1013`); no Audiobookshelf/Calibre scan call
+  exists. An optional post-import webhook/API call would surface new books
+  immediately. M.
+- **D6 — real "Send to Kindle" delivery**: `send_to_kindle` only sorts folders +
+  tags today (`main.py:1026`); actual SMTP / Calibre-Web delivery is a new
+  subsystem, arguably beyond the app's "finder" scope. L. Most speculative.
+
+Reconciliation: import notifications (017) and search filters (016) were already
+shipped; in-app auth (deferred to reverse proxy, ADR-0001), bulk retry-all
+(rejected 2026-07-24), and re-adding `/health` (removed `fc9251e`) were **not**
+re-raised.
+
+**Execution log (2026-07-27), chained toward a v0.0.3 bundle — none merged to master yet:**
+- **023** — verdict **APPROVE**: done criteria re-run independently; regression
+  test proven to fail on unpatched code, pass on patched; scope clean,
+  additions-only. Commit `d511329`, branch `advisor/023-upgrade-safe-history-migrations`.
+- **024** — verdict **APPROVE**: chained on 023 (`git merge advisor/023`). Delta
+  reviewed against `d511329`; scope clean (only `main.py` + `test_preflight.py`,
+  `ensure_history_schema` untouched). Proven empirically: writable DB dir → import
+  succeeds (test-safe); missing DB dir → `[preflight] FATAL: …` + exit 1 (fatal
+  path fires, no traceback). Suite 45 passed. Commit `084649a`, branch
+  `advisor/024-startup-preflight-diagnostics` (which **contains 023 + 024**;
+  worktree `agent-a9bb24277863328e7`).
+- **025** — verdict **APPROVE**: chained on 024. Delta vs `084649a` is exactly
+  `Dockerfile` (CMD → `sh -c "exec uvicorn … --port ${PORT:-8080}"`, `EXPOSE 8080`
+  kept) + one `README.md` env-table row; `app/` untouched. `${PORT:-8080}`
+  expansion validated (9000→9000, unset/empty→8080); Docker build is the
+  maintainer's final check (not runnable in-worktree). Commit `40585b0`, branch
+  `advisor/025-configurable-listen-port` — **this branch contains the full chain
+  023 + 024 + 025** (worktree `agent-a2f334454a0ae229d`).
+
+**All three DONE and stacked on one branch (`advisor/025-…` @ `40585b0`), not
+merged to master.** Merging the chain (plus the separate uncommitted
+`index.html` History-table fix) is the v0.0.3 bundle — the maintainer's call.
 
 ## Post-implementation audit (2026-07-24, branch `advisor/plans-001-012` @ `57c0af6`)
 
