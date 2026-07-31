@@ -293,6 +293,17 @@ def mam_account_is_authenticated(data: dict) -> bool:
     return uid is not None and str(uid).strip() != ""
 
 # ---------------------------- App ----------------------------
+async def torrent_client_warning() -> str | None:
+    """Return a warning if the configured torrent client is unreachable at
+    startup, else None. Never raises."""
+    try:
+        await get_torrent_client().reachable()
+        return None
+    except Exception as exc:
+        return (f"{settings.TORRENT_CLIENT} is not reachable at startup ({exc!s}) "
+                f"— check its URL and credentials; torrent adds and imports will "
+                f"fail until it is up")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     warn = hardlink_fs_warning(settings.DOWNLOADS_DIR, settings.LIBRARY_DIR)
@@ -302,6 +313,9 @@ async def lifespan(app: FastAPI):
         if not os.path.isdir(d):
             print(f"[preflight] WARNING: library directory {d!r} does not exist yet "
                   f"— imports there will fail until it is mounted/created", file=sys.stderr)
+    client_warn = await torrent_client_warning()
+    if client_warn:
+        print(f"[preflight] WARNING: {client_warn}", file=sys.stderr)
     await reconcile_auto_import_task()
     try:
         yield
@@ -730,6 +744,10 @@ class TorrentClient:
         """Return (relative file names, source directory) for a completed torrent."""
         raise NotImplementedError
 
+    async def reachable(self) -> None:
+        """Raise if the client is unreachable / misconfigured; return None if OK."""
+        raise NotImplementedError
+
 
 class TransmissionClient(TorrentClient):
     async def add_torrent(self, metainfo, mam_id, media_type, send_to_kindle):
@@ -761,6 +779,10 @@ class TransmissionClient(TorrentClient):
                 raise HTTPException(status_code=404, detail="Torrent download directory not found")
             names = [(f.get("name") or "").lstrip("/") for f in files if f.get("name")]
             return names, download_dir
+
+    async def reachable(self):
+        async with httpx.AsyncClient(timeout=5) as c:
+            await transmission_rpc(c, "session-get")
 
 
 class QbittorrentClient(TorrentClient):
@@ -845,6 +867,10 @@ class QbittorrentClient(TorrentClient):
                 raise HTTPException(status_code=404, detail="No files found for torrent")
             names = [(f.get("name") or "").lstrip("/") for f in files if isinstance(f, dict) and f.get("name")]
             return names, save_path
+
+    async def reachable(self):
+        async with httpx.AsyncClient(timeout=5) as c:
+            await self._login(c)
 
 
 def get_torrent_client() -> TorrentClient:
