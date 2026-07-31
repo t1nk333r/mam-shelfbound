@@ -43,8 +43,46 @@ commit messages are short and present-tense with no prefixes.
 | 023 | Upgrade-safe history-schema migrations (guarded ALTERs + `user_version`) | P1 | M | — | DONE |
 | 024 | Startup preflight diagnostics (fatal DB-writability + fs warnings) | P2 | M | — | DONE |
 | 025 | Configurable listen port (`PORT` env, default 8080) | P3 | S | — | DONE |
+| 026 | Torrent-client reachability preflight (warn-only) | P3 | M | — | DONE |
+| 027 | Multi-arch image (amd64 + arm64, adds QEMU) | P3 | S | — | DONE |
+| 028 | Dependabot config (github-actions, docker, pip) | P3 | S | — | DONE |
+| 029 | Optional `MAM_ID_FILE` (mamapi session handoff) | P3 | S-M | — | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale) | REVIEW (design deliverable, no code to execute)
+
+## Direction pass (2026-07-30) — plans 026-029
+
+Second `next` pass, after 023-025 shipped as v0.0.3/v0.0.4 (repo renamed to
+`*-transmission-qbit`). Four of six surfaced options selected. All four are
+**independent** (no dependency ordering); 026 and 029 both edit `app/main.py` but
+in different regions (026: `lifespan`; 029: `Settings`/`mam_headers`) — a trivial
+merge if executed as separate branches. Recommended as a **v0.0.5** bundle:
+
+- **026 — torrent-client reachability preflight** (M, `app/main.py`). Warn-only
+  startup ping so a wrong `QB_URL`/creds or a down client is flagged at boot, not
+  on first Add. Completes the deferred follow-up from plan 024.
+- **027 — multi-arch image** (S, workflow). Adds `linux/arm64` (plus the QEMU
+  setup the workflow currently lacks) so ARM hosts can run the image.
+- **028 — Dependabot config** (S, new `.github/dependabot.yml`). Automates the
+  action / base-image / pip bumps that plan 022 did by hand.
+- **029 — optional `MAM_ID_FILE`** (S-M, `app/main.py` + README). Reads the MAM
+  cookie from a file (e.g. mamapi's output) per request, so a rotating session
+  stays valid without a restart. This is the former **D4**.
+
+**Surfaced but NOT selected this pass** (still available to plan on request):
+- **D5 — post-import library-scan trigger** (Audiobookshelf/Calibre scan call
+  after a successful import). M.
+- **D6 — real "Send to Kindle" delivery** (SMTP / Calibre-Web handoff). L, speculative.
+
+Reconciliation: 023-025 shipped as v0.0.3/v0.0.4 — not re-raised; in-app auth
+(ADR-0001), bulk retry-all, and re-adding `/health` remain settled/rejected.
+
+**Execution log (2026-07-30) — all four executed, reviewed (verdict APPROVE), chained; not merged to master:**
+- **026** `badaafa` — warn-only reachability check in `lifespan`; 47 tests, respx tests proven genuine.
+- **027** `a495555` — QEMU (resolved to `@v4`, the current major, off the plan's stale `v3` guess) + `platforms: linux/amd64,linux/arm64`; QEMU ordered before Buildx, `@v4` tag resolves.
+- **028** `7e98d2b` — `.github/dependabot.yml`, three ecosystems, valid YAML.
+- **029** `a330e28` — `MAM_ID_FILE`; **needed one revision round**: review caught that `/search` built its own headers with the *static* cookie (`main.py:372`), bypassing the new dynamic cookie — a gap in the plan's scope, not the executor's work. Fixed so both `mam_headers()` and `/search` use `current_mam_cookie()`. 52 tests.
+- All stacked on branch `advisor/029-dynamic-mam-session-file` @ `a330e28` (contains 026 + 027 + 028 + 029) — the **v0.0.5** bundle. Merging is the maintainer's call.
 
 ## Direction pass (2026-07-27) — plans 023-025
 
