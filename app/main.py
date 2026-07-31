@@ -393,7 +393,7 @@ async def search(payload: dict):
     body = {"tor": tor, "perpage": perpage}
 
     headers = {
-        "Cookie": settings.MAM_COOKIE,
+        "Cookie": current_mam_cookie(),
         "Content-Type": "application/json",
         "Accept": "application/json, */*",
         "User-Agent": "Mozilla/5.0",
