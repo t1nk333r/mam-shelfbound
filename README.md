@@ -77,6 +77,7 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 | `FL_WEDGE_MIN_RESERVE` | Keep this many freeleech wedges unspent (0 = spend freely) |
 | `NOTIFY_WEBHOOK_URL` | Optional webhook for import-failure notifications (empty = disabled) |
 | `PORT` | Port the app listens on inside the container (default `8080`); set this to avoid a clash when sharing another container's network namespace |
+| `MAM_ID_FILE` | Optional path to a file holding the current `mam_id` (e.g. written by [mamapi](https://github.com/elforkhead/mamapi)); read per request so a rotating session stays valid without a restart. Falls back to `MAM_COOKIE`. |
 
 ### Download client
 

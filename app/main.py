@@ -98,8 +98,12 @@ class Settings:
     def __init__(self) -> None:
         self.MAM_BASE = DEFAULT_MAM_BASE
         self.MAM_COOKIE = build_mam_cookie(os.getenv("MAM_COOKIE", ""))
-        if not self.MAM_COOKIE:
-            raise RuntimeError("MAM_COOKIE environment variable is required and must be set to a non-empty value")
+        self.MAM_ID_FILE = os.getenv("MAM_ID_FILE", "").strip()
+        if not self.MAM_COOKIE and not self.MAM_ID_FILE:
+            raise RuntimeError(
+                "Set MAM_COOKIE (a MAM session cookie) or MAM_ID_FILE (path to a "
+                "file containing the current mam_id, e.g. written by mamapi)"
+            )
         self.TRANSMISSION_URL = os.getenv("TRANSMISSION_URL", "http://transmission:9091/transmission/rpc").rstrip("/")
         self.TRANSMISSION_USER = os.getenv("TRANSMISSION_USER", "")
         self.TRANSMISSION_PASS = os.getenv("TRANSMISSION_PASS", "")
@@ -251,9 +255,23 @@ def ensure_history_schema() -> None:
 run_startup_preflight()
 ensure_history_schema()
 
+def current_mam_cookie() -> str:
+    """The MAM cookie for outgoing requests. If MAM_ID_FILE is set and readable,
+    its contents (normalized via build_mam_cookie) are used, so an external
+    updater like mamapi can refresh the session without restarting this app.
+    Falls back to the static MAM_COOKIE."""
+    if settings.MAM_ID_FILE:
+        try:
+            raw = Path(settings.MAM_ID_FILE).read_text().strip()
+        except OSError:
+            raw = ""
+        if raw:
+            return build_mam_cookie(raw)
+    return settings.MAM_COOKIE
+
 def mam_headers(*, torrent: bool = False) -> dict:
     headers = {
-        "Cookie": settings.MAM_COOKIE,
+        "Cookie": current_mam_cookie(),
         "User-Agent": "Mozilla/5.0",
         "Referer": "https://www.myanonamouse.net/",
         "Origin": "https://www.myanonamouse.net",
