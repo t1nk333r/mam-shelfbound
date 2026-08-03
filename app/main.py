@@ -294,16 +294,29 @@ async def fetch_account_summary(client: httpx.AsyncClient) -> dict:
         raise HTTPException(status_code=502, detail="MAM account summary returned unexpected data")
     return data
 
-async def fetch_freeleech_wedge_count(client: httpx.AsyncClient) -> int | None:
-    data = await fetch_account_summary(client)
-    wedges = data.get("wedges")
-    if wedges is None:
+def _nonneg_int(raw) -> int | None:
+    """Coerce a MAM numeric field (int/float/str) to a non-negative int, else None."""
+    if raw is None:
         return None
     try:
-        value = int(wedges)
+        value = int(float(raw))
     except (TypeError, ValueError):
         return None
     return value if value >= 0 else None
+
+def extract_wedge_count(data: dict) -> int | None:
+    return _nonneg_int(data.get("wedges"))
+
+def extract_bonus_points(data: dict) -> int | None:
+    # MAM's jsonLoad.php returns bonus points as `seedbonus`; fallbacks for safety.
+    for key in ("seedbonus", "bonus", "bonusPoints", "points"):
+        if data.get(key) is not None:
+            return _nonneg_int(data.get(key))
+    return None
+
+async def fetch_freeleech_wedge_count(client: httpx.AsyncClient) -> int | None:
+    data = await fetch_account_summary(client)
+    return extract_wedge_count(data)
 
 def mam_account_is_authenticated(data: dict) -> bool:
     """Return whether the MAM account response represents a logged-in user."""
@@ -645,8 +658,11 @@ async def add_to_transmission(body: AddBody):
 @app.get("/account")
 async def account_status():
     async with httpx.AsyncClient(timeout=30) as client:
-        freeleech_wedges = await fetch_freeleech_wedge_count(client)
-    return {"freeleech_wedges": freeleech_wedges}
+        data = await fetch_account_summary(client)
+    return {
+        "freeleech_wedges": extract_wedge_count(data),
+        "bonus_points": extract_bonus_points(data),
+    }
 
 # ---------------------------- History ----------------------------
 @app.get("/history")
@@ -1264,4 +1280,3 @@ async def reconcile_auto_import_task():
         stop_event = asyncio.Event()
         app.state.auto_import_stop = stop_event
         app.state.auto_import_task = asyncio.create_task(auto_import_loop(stop_event))
-

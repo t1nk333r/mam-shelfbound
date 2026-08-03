@@ -252,20 +252,31 @@ function renderInHistoryBadge(item) {
   return `<div class="result-flags"><span class="result-badge result-badge-history">${escapeHtml(label)}</span></div>`;
 }
 
-function setAccountStatus(value) {
+let lastWedges = null;
+let lastBonus = null;
+
+function renderAccountStatus() {
   if (!accountStatusEl) return;
-  accountStatusEl.textContent = `Freeleech wedges: ${value ?? 'unknown'}`;
+  const w = lastWedges ?? 'unknown';
+  const b = (lastBonus == null) ? 'unknown' : Number(lastBonus).toLocaleString();
+  accountStatusEl.textContent = `Freeleech wedges: ${w} · Bonus points: ${b}`;
+}
+
+function setAccountStatus(wedges, bonus) {
+  if (wedges !== undefined) lastWedges = wedges;
+  if (bonus !== undefined) lastBonus = bonus;
+  renderAccountStatus();
 }
 
 async function refreshAccountStatus() {
   if (!accountStatusEl) return;
-  accountStatusEl.textContent = 'Freeleech wedges: loading...';
+  accountStatusEl.textContent = 'Freeleech wedges: loading... · Bonus points: loading...';
   try {
     const data = await fetchJson('/account');
-    setAccountStatus(data?.freeleech_wedges);
+    setAccountStatus(data?.freeleech_wedges, data?.bonus_points);
   } catch (e) {
     console.error('account status failed', e);
-    accountStatusEl.textContent = 'Freeleech wedges: unavailable';
+    accountStatusEl.textContent = 'Freeleech wedges: unavailable · Bonus points: unavailable';
   }
 }
 
