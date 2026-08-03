@@ -48,6 +48,8 @@ commit messages are short and present-tense with no prefixes.
 | 028 | Dependabot config (github-actions, docker, pip) | P3 | S | — | DONE |
 | 029 | Optional `MAM_ID_FILE` (mamapi session handoff) | P3 | S-M | — | DONE |
 | 030 | Client-side sortable results-table columns | P3 | M | — | DONE |
+| 031 | Right-sized engineering handbook under `docs/` | P3 | L | — | TODO |
+| 032 | MAM bonus-points indicator (beside freeleech wedges) | P3 | S-M | — | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale) | REVIEW (design deliverable, no code to execute)
 
