@@ -47,6 +47,7 @@ commit messages are short and present-tense with no prefixes.
 | 027 | Multi-arch image (amd64 + arm64, adds QEMU) | P3 | S | — | DONE |
 | 028 | Dependabot config (github-actions, docker, pip) | P3 | S | — | DONE |
 | 029 | Optional `MAM_ID_FILE` (mamapi session handoff) | P3 | S-M | — | DONE |
+| 030 | Client-side sortable results-table columns | P3 | M | — | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale) | REVIEW (design deliverable, no code to execute)
 
@@ -529,8 +530,45 @@ The source was unchanged from the standard audit at the time of this sweep.
 - **Swallowed `umask` error** (`app/main.py:84-85` `except Exception: pass`): *note-only* — best-effort.
 - CSS (`app/static/common.css`) scanned: no external `@import`/`url()` — clean.
 
+## UI/UX request (2026-08-01, `plan` variant) — plan 030 + reconciliation
+
+A multi-part "modernize the results table" request came in. Resolved against the
+current code (vanilla-JS frontend, no framework/build):
+
+- **Sortable results columns** → **plan 030** (the only real new work). Clean fit:
+  `lastResults` + `renderResults()` already exist, so sorting reorders the array
+  and re-renders — no API call, filters/badges/buttons preserved.
+  - **Executed & reviewed 2026-08-01 — verdict APPROVE.** Commit `71aa6fc` on
+    branch `advisor/030-sortable-results-columns` (not merged). The executor hit a
+    transient API error mid-run; it had finished the edits + 52 tests, so it was
+    resumed to commit rather than re-dispatched. Reviewer **render-verified in a
+    real browser** (worktree app on :8099, injected rows chosen so lexical ≠
+    numeric order): Size sorts by magnitude, Seeders by number, Uploaded by date;
+    asc→desc→reset cycle + ▲/▼ indicator (one active at a time); **0 fetches during
+    sorting**; Add/Link/badges preserved; filter+sort compose; empty state OK.
+    Note: the plan's `grep -c 'data-sort-key' → 7` done-criterion was miscounted
+    (Step-2 CSS adds 2 `data-sort-key` selectors → 9 total); the executor correctly
+    flagged it rather than gaming the count — the 7 `<th data-sort-key=…>` attributes
+    are correct.
+- **"History panel has an empty right gutter" / "make both tables match"** →
+  **already fixed** in v0.0.3 (commit `8e23efc` removed the `.card` wrapper); on
+  current `master` the History table is a bare full-width `<table>` identical to
+  results. The reported gutter is the **old v0.0.2 image** still running — deploying
+  v0.0.5 resolves it. No plan written; verify after deploy.
+- **"Extract a reusable DataTable component"** → **not recommended** (recorded
+  below). A generic component abstraction is over-engineering for a single-file
+  vanilla-JS frontend that `AGENTS.md` says should stay flat; the two tables are
+  structurally different and only results needs sorting. Plan 030 adds sorting
+  with a few flat helpers instead.
+
 ## Findings considered and rejected
 
+- **Reusable "DataTable" component (from the 2026-08-01 UI request)**: not worth
+  doing — no JS framework/build here, the results and history tables render
+  different columns with different cell logic, and only the results table needs
+  sorting. A generic abstraction would be high-risk churn against the repo's
+  flat-helper convention for ~zero payoff. Sorting was delivered as small helpers
+  in plan 030 instead.
 - **No authentication on the app**: intentional and documented (`README.md:64`
   — "The app has no authentication, so do not expose it directly to the public
   internet"). Not a defect. Offered instead as a *direction* option (optional
