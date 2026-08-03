@@ -95,6 +95,9 @@
     }
     .right { text-align:right; }
     .center { text-align: center; }
+    th[data-sort-key] { cursor: pointer; user-select: none; white-space: nowrap; }
+    th[data-sort-key]:hover { color: var(--text); }
+    .sort-ind { color: var(--accent); font-size: 0.8em; }
     .result-title-cell { display:flex; flex-direction:column; gap:0.35rem; }
     .result-title-main { font-weight:600; }
     .result-flags { display:flex; gap:0.35rem; flex-wrap:wrap; }
@@ -212,13 +215,13 @@
   <table id="results" style="display:none">
     <thead>
       <tr>
-        <th>Title</th>
-        <th>Author</th>
-        <th>Narrator</th>
-        <th>Filetype</th>
-        <th class="right">Size</th>
-        <th class="right">Seeders</th>
-        <th>Uploaded</th>
+        <th data-sort-key="title">Title</th>
+        <th data-sort-key="author">Author</th>
+        <th data-sort-key="narrator">Narrator</th>
+        <th data-sort-key="format">Filetype</th>
+        <th class="right" data-sort-key="size">Size</th>
+        <th class="right" data-sort-key="seeders">Seeders</th>
+        <th data-sort-key="added">Uploaded</th>
         <th class="center">Link</th>
         <th>Add</th>
       </tr>

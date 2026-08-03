@@ -22,6 +22,8 @@ const clearFiltersBtn = document.getElementById('clearFilters');
 
 let lastResults = [];              // raw results from the most recent search
 let historyMamIds = new Map();     // mam_id -> torrent_status, for the "in history" badge
+let sortKey = null;   // null = original API order; otherwise a data-sort-key value
+let sortDir = null;   // 'asc' | 'desc'
 
 function showHistoryCard() {
   historyCard.style.display = 'block';
@@ -64,6 +66,7 @@ function updateSearchPlaceholder() {
 
 mediaTypeInputs.forEach((input) => input.addEventListener('change', updateSearchPlaceholder));
 updateSearchPlaceholder();
+initSortHeaders();
 
 refreshAccountStatus();
 
@@ -155,7 +158,8 @@ function matchesFilters(item, f) {
 
 function renderResults() {
   const f = currentFilters();
-  const shown = lastResults.filter((it) => matchesFilters(it, f));
+  let shown = lastResults.filter((it) => matchesFilters(it, f));
+  if (sortKey) shown = sortResults(shown, sortKey, sortDir);
 
   tbody.innerHTML = '';
   shown.forEach((it) => tbody.appendChild(buildResultRow(it)));
@@ -164,6 +168,27 @@ function renderResults() {
   statusEl.textContent = shown.length === lastResults.length
     ? `${shown.length} results shown`
     : `${shown.length} of ${lastResults.length} results shown`;
+  updateSortIndicators();
+}
+
+function updateSortIndicators() {
+  table.querySelectorAll('thead th[data-sort-key]').forEach((th) => {
+    let ind = th.querySelector('.sort-ind');
+    if (!ind) { ind = document.createElement('span'); ind.className = 'sort-ind'; th.appendChild(ind); }
+    ind.textContent = th.dataset.sortKey === sortKey ? (sortDir === 'desc' ? ' ▼' : ' ▲') : '';
+  });
+}
+
+function initSortHeaders() {
+  table.querySelectorAll('thead th[data-sort-key]').forEach((th) => {
+    th.addEventListener('click', () => {
+      const key = th.dataset.sortKey;
+      if (sortKey !== key) { sortKey = key; sortDir = 'asc'; }        // 1st click: asc
+      else if (sortDir === 'asc') { sortDir = 'desc'; }               // 2nd click: desc
+      else { sortKey = null; sortDir = null; }                        // 3rd click: reset to API order
+      renderResults();
+    });
+  });
 }
 
 function buildResultRow(it) {
@@ -320,6 +345,58 @@ function buildRetryButton(item) {
     await loadHistory();
   });
   return retryBtn;
+}
+
+// Parse a size value (numeric bytes, or a string like "12.3 GiB" / "528.9 MiB"
+// / "5.4 KiB" / "800 B") to a comparable byte count. Blank/unparseable -> -Infinity.
+function sizeToBytes(v) {
+  if (v == null || v === '') return -Infinity;
+  if (typeof v === 'number') return Number.isFinite(v) ? v : -Infinity;
+  const s = String(v).trim();
+  const asNum = Number(s);
+  if (Number.isFinite(asNum)) return asNum;            // pure numeric string = bytes
+  const m = s.match(/([\d.]+)\s*([KMGT])?i?B/i);
+  if (!m) return -Infinity;
+  const val = parseFloat(m[1]);
+  if (!Number.isFinite(val)) return -Infinity;
+  const mult = { '': 1, K: 1024, M: 1024 ** 2, G: 1024 ** 3, T: 1024 ** 4 };
+  return val * (mult[(m[2] || '').toUpperCase()] ?? 1);
+}
+
+// Parse the "Uploaded" value to a timestamp. Blank/unparseable -> -Infinity.
+function parseUploaded(v) {
+  if (!v) return -Infinity;
+  const t = new Date(String(v).replace(' ', 'T')).getTime();
+  return Number.isFinite(t) ? t : -Infinity;
+}
+
+const RESULT_SORTERS = {
+  title:    { get: (it) => it.title || '',         type: 'str' },
+  author:   { get: (it) => it.author_info || '',   type: 'str' },
+  narrator: { get: (it) => it.narrator_info || '', type: 'str' },
+  format:   { get: (it) => it.format || '',        type: 'str' },
+  size:     { get: (it) => sizeToBytes(it.size),   type: 'num' },
+  seeders:  { get: (it) => { const n = Number(it.seeders); return Number.isFinite(n) ? n : -Infinity; }, type: 'num' },
+  added:    { get: (it) => parseUploaded(it.added), type: 'num' },
+};
+
+// Stable sort: decorate with original index and tie-break on it, so equal keys
+// keep their filtered (API) order regardless of the engine's sort stability.
+function sortResults(arr, key, dir) {
+  const s = RESULT_SORTERS[key];
+  if (!s) return arr;
+  const sign = dir === 'desc' ? -1 : 1;
+  return arr
+    .map((it, i) => [it, i])
+    .sort((a, b) => {
+      const av = s.get(a[0]);
+      const bv = s.get(b[0]);
+      let c;
+      if (s.type === 'str') c = String(av).localeCompare(String(bv), undefined, { sensitivity: 'base' });
+      else c = av < bv ? -1 : av > bv ? 1 : 0;
+      return c !== 0 ? c * sign : a[1] - b[1];
+    })
+    .map((x) => x[0]);
 }
 
 function formatSize(sz) {
