@@ -13,6 +13,7 @@ Lightweight web app and API for searching MyAnonamouse, sending downloads to Tra
 - Search MAM for audiobooks and ebooks
 - Add torrents to Transmission or qBittorrent with a dedicated label/category
 - Track download history
+- Show your MyAnonamouse freeleech-wedge and bonus-point balance in the header, refreshed on load and after each search or add
 - Auto-import completed audiobooks into `/library` using hardlinks
 - Auto-import completed ebooks into `/ebooks-nosend` (default) or `/ebooks` (when `Send to Kindle` is checked) using copies
 - Import ebooks into `/ebooks-nosend` by default; check `Send to Kindle` before adding to import into `/ebooks` instead
@@ -89,6 +90,7 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 - The `Send to Kindle` ebook toggle defaults **off**: new ebook adds are tagged `kindle-nosend` and imported into `/ebooks-nosend`. Check `Send to Kindle` before adding to send the ebook to Kindle and import it into `/ebooks` instead.
 - Failed imports show `Failure` in history and can be retried with the row's `Retry` button after fixing the underlying path, mount, or permission issue.
 - The app has no authentication, so do not expose it directly to the public internet.
+- The status line above the results shows your current **freeleech wedges** and **bonus points** — MyAnonamouse's seed-bonus balance, formatted with thousands separators. Both are read from MAM when the page loads and refresh after each search or add. A field reads `unknown` when MAM does not return that value, and `unavailable` when the account lookup fails. The display is read-only and needs no configuration.
 - Freeleech wedges are spent automatically on audiobook adds. Set `FL_WEDGE_MIN_RESERVE` to keep a reserve — with `5`, the app stops using wedges once your balance reaches 5 and adds normally instead. The default `0` spends whenever any are available.
 - Set `NOTIFY_WEBHOOK_URL` to receive a plain-text message whenever an import fails — for example an [ntfy](https://ntfy.sh) topic URL. Leave it empty to disable notifications. Delivery is best-effort: a webhook that is down is logged and ignored, never retried, and never affects the import itself.
 
