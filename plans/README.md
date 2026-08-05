@@ -50,8 +50,78 @@ commit messages are short and present-tense with no prefixes.
 | 030 | Client-side sortable results-table columns | P3 | M | — | DONE |
 | 031 | Right-sized engineering handbook under `docs/` | P3 | L | — | TODO |
 | 032 | MAM bonus-points indicator (beside freeleech wedges) | P3 | S-M | — | DONE |
+| 033 | Post-import library-scan trigger (media-server rescan webhook) | P3 | M | — | TODO |
+| 034 | Import success notifications (opt-in `NOTIFY_ON_SUCCESS`) | P3 | S | — | TODO |
+| 035 | In-flight download progress in the History table | P3 | L | — | DONE |
+| 036 | Pre-add library-collision guard ("In library" badge) | P3 | M | — | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale) | REVIEW (design deliverable, no code to execute)
+
+## Direction pass (2026-08-04) — plans 033-035
+
+Fourth `next` pass, run after **v0.0.7** shipped (bonus-points indicator, sortable
+columns, filters). The "results/finished" half of the app is now well developed, so
+this pass targeted the least-developed surfaces: **what happens around a successful
+import**, and **the in-flight gap between Add and Import**. Grounded in the success
+chokepoint `mark_history_imported` (`app/main.py:965`, called from both the poller
+`:1221` and manual retry `:712`) and the discarded `percentDone`/`progress` data
+(`app/main.py:727`).
+
+Five options surfaced; the operator selected the recommended three ("queue and
+table it"). All three are **independent**; 033 and 034 both append a call to the end
+of `mark_history_imported` — a trivial merge if executed as separate branches (same
+shape as the 026/029 note); 035 is fully disjoint.
+
+- **033 — post-import library-scan trigger** (M, `app/main.py` + README). Optional
+  `LIBRARY_SCAN_WEBHOOK_URL` (+ `LIBRARY_SCAN_AUTH_HEADER`) POSTed after each
+  successful import so Audiobookshelf/Calibre/Plex rescans immediately. Reuses plan
+  017's fire-and-forget pattern; no dependency; no-op unless configured. This is the
+  former **D5** — highest fit, since the production deploy imports into Audiobookshelf.
+- **034 — import success notifications** (S, `app/main.py` + README). Opt-in
+  `NOTIFY_ON_SUCCESS` sends an "Imported: <title>" message over the existing
+  `NOTIFY_WEBHOOK_URL` (plan 017 was failure-only); generalizes the two notification
+  helpers to message-agnostic names.
+- **035 — in-flight download progress** (L, `app/main.py` + `app/static/app.js`).
+  New `in_progress()` client method (both backends) + best-effort merge into
+  `/history` + a "Downloading NN%" label. No schema change; progress read live. The
+  most ambitious — turns the Add→Import black box into a status.
+  - **Executed & reviewed 2026-08-04 — verdict APPROVE.** Commit `3bc0f0f` on
+    branch `worktree-agent-a3d92e27285b06f33` (**not merged**). Reviewer independently
+    re-ran all criteria: `py_compile` 0, `node --check` 0, **61 tests** (57 + 4).
+    Scope clean (3 files; DB schema, `completed_hashes`, `torrent_source`, and the
+    auto-import loop untouched). Tests prove `/history` skips the client call when
+    nothing is in flight, and imported/failed rows never show a percent. Independent
+    of 036 (disjoint app.js regions: 035 = `renderHistoryStatusCell`, 036 =
+    `buildResultRow`/`renderInLibraryBadge`).
+
+**Surfaced but NOT selected this pass** (recorded so they are not re-audited;
+available to plan on request):
+- **D7 — pre-add library-collision guard** → **planned as 036** (2026-08-04, via
+  `plan D7`): the "in history" badge (plan 016) only reflects *app* history by
+  `mam_id`; books already on disk in `/library` from manual/pre-app imports aren't
+  flagged, and `next_available` (`app/main.py:900`) silently creates `Title (2)`.
+  036 annotates each `/search` result with an on-disk existence check (same
+  `sanitize` naming as the importer) and renders an "In library" badge — warn-only,
+  Add stays enabled (per plan 016's rule). M.
+  - **Executed & reviewed 2026-08-04 — verdict APPROVE.** Commit `346dd1a` on
+    worktree branch `worktree-agent-ac8ac3abf5707b0df` (**not merged** — maintainer's
+    call). Reviewer independently re-ran all done criteria: `py_compile` 0,
+    `node --check` 0, **62 tests** (57 baseline + 5 new). Scope clean (only the 4
+    in-scope files; Add-button logic, `sanitize`/`next_available`/`safe_child_path`,
+    and the import pipeline all untouched). New tests assert real behavior (the
+    sanitized-name case proves `Book: One/Two` isn't treated as a subdir). One plan
+    doc nit fixed post-hoc: Step 5's verify command omitted the `tests/` path
+    segment; the executor flagged it and ran the correct path rather than gaming it.
+- **D6 — real "Send to Kindle" delivery** (re-surfaced, still deferred):
+  `send_to_kindle` only sorts folders + tags today (`qb_tags` `app/main.py:737`,
+  import dir `:1143`); true SMTP / Calibre-Web delivery is a new subsystem
+  (credentials, MIME, format conversion), arguably beyond the app's "finder" scope.
+  L, most speculative.
+
+Reconciliation: nothing already shipped (001-030, 032) was re-raised; in-app auth
+(ADR-0001), bulk retry-all, `/health`, the DataTable refactor, and the per-add FL
+toggle remain settled/rejected. Plan 031 (docs handbook) is still TODO, independent
+of this pass.
 
 ## Direction pass (2026-07-30) — plans 026-029
 
