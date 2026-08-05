@@ -327,7 +327,12 @@ function renderHistoryStatusCell(item) {
     imported: 'Imported',
     import_failed: 'Failure'
   };
-  const label = labels[status] || status;
+  let label = labels[status] || status;
+  const pct = item?.download_progress;
+  if ((status === '' || status === 'added') && typeof pct === 'number') {
+    label = `Downloading ${pct}%`;
+    classes.push('history-status-active');
+  }
 
   const statusHtml = classes.length
     ? `<span class="${classes.join(' ')}">${escapeHtml(label)}</span>`

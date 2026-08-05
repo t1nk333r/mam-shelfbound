@@ -688,7 +688,19 @@ def history():
             ORDER BY id DESC
             LIMIT 200
         """)).mappings().all()
-    return {"items": list(rows)}
+    items = [dict(r) for r in rows]
+    in_flight = [
+        it for it in items
+        if it.get("torrent_status") in (None, "", "added") and (it.get("torrent_hash") or "").strip()
+    ]
+    if in_flight:
+        progress = current_download_progress()
+        if progress:
+            for it in in_flight:
+                pct = progress.get((it.get("torrent_hash") or "").strip())
+                if pct is not None:
+                    it["download_progress"] = pct
+    return {"items": items}
 
 @app.post("/history/{history_id}/retry")
 async def retry_history_import(history_id: int):
@@ -782,6 +794,10 @@ class TorrentClient:
         """Raise if the client is unreachable / misconfigured; return None if OK."""
         raise NotImplementedError
 
+    async def in_progress(self) -> dict:
+        """Return {hash: percent_complete 0-100} for not-yet-complete torrents."""
+        raise NotImplementedError
+
 
 class TransmissionClient(TorrentClient):
     async def add_torrent(self, metainfo, mam_id, media_type, send_to_kindle):
@@ -817,6 +833,23 @@ class TransmissionClient(TorrentClient):
     async def reachable(self):
         async with httpx.AsyncClient(timeout=5) as c:
             await transmission_rpc(c, "session-get")
+
+    async def in_progress(self):
+        async with httpx.AsyncClient(timeout=30) as c:
+            args = await transmission_rpc(c, "torrent-get", {
+                "fields": ["hashString", "percentDone", "labels"],
+            })
+            out = {}
+            for t in args.get("torrents") or []:
+                if settings.TRANSMISSION_LABEL and settings.TRANSMISSION_LABEL not in (t.get("labels") or []):
+                    continue
+                pct = float(t.get("percentDone") or 0)
+                if pct >= 1:
+                    continue
+                h = t.get("hashString")
+                if h:
+                    out[h] = round(pct * 100, 1)
+            return out
 
 
 class QbittorrentClient(TorrentClient):
@@ -906,11 +939,48 @@ class QbittorrentClient(TorrentClient):
         async with httpx.AsyncClient(timeout=5) as c:
             await self._login(c)
 
+    async def in_progress(self):
+        async with httpx.AsyncClient(timeout=30) as c:
+            await self._login(c)
+            r = await c.get(
+                f"{settings.QB_URL}/api/v2/torrents/info",
+                params={"category": settings.QB_CATEGORY, "filter": "downloading"},
+            )
+            try:
+                arr = r.json()
+            except ValueError:
+                arr = []
+            out = {}
+            for t in arr:
+                if not isinstance(t, dict):
+                    continue
+                h = t.get("hash")
+                try:
+                    p = float(t.get("progress"))
+                except (TypeError, ValueError):
+                    continue
+                if h and p < 1:
+                    out[h] = round(p * 100, 1)
+            return out
+
 
 def get_torrent_client() -> TorrentClient:
     if settings.TORRENT_CLIENT == "qbittorrent":
         return QbittorrentClient()
     return TransmissionClient()
+
+def current_download_progress() -> dict:
+    """Best-effort {hash: percent 0-100} for in-flight torrents. Never raises.
+
+    Called from the sync /history route (threadpool, no running loop), so
+    asyncio.run is safe here. Any client error yields {} — progress is a
+    nice-to-have and must never break history.
+    """
+    try:
+        return asyncio.run(get_torrent_client().in_progress())
+    except Exception:
+        logger.warning("Could not fetch download progress", exc_info=True)
+        return {}
 
 # ---------------------------- Perform Import ----------------------------
 
