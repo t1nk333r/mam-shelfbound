@@ -475,10 +475,12 @@ async def search(payload: dict):
     for item in raw.get("data", []):
         is_freeleech = is_truthy(item.get("free")) or is_truthy(item.get("fl_vip"))
         is_vip = is_truthy(item.get("vip")) or is_truthy(item.get("fl_vip"))
+        title = item.get("title") or item.get("name")
+        author_info = flatten(item.get("author_info"))
         out.append({
             "id": str(item.get("id") or item.get("tid") or ""),
-            "title": item.get("title") or item.get("name"),
-            "author_info": flatten(item.get("author_info")),
+            "title": title,
+            "author_info": author_info,
             "narrator_info": flatten(item.get("narrator_info")),
             "format": detect_format(item),
             "size": item.get("size"),
@@ -490,6 +492,7 @@ async def search(payload: dict):
             "media_type": media_type,
             "is_freeleech": is_freeleech,
             "is_vip": is_vip,
+            "in_library": title_in_library(author_info, title, media_type),
         })
 
     return JSONResponse({
@@ -1000,6 +1003,31 @@ def next_available(path: Path) -> Path:
         if not cand.exists():
             return cand
         i += 1
+
+def library_check_dirs(media_type: str) -> list[str]:
+    if normalize_media_type(media_type) == MEDIA_TYPE_EBOOK:
+        return [settings.EBOOKS_DIR, settings.EBOOKS_NOSEND_DIR]
+    return [settings.LIBRARY_DIR]
+
+
+def title_in_library(author: str, title: str, media_type: str) -> bool:
+    """True if a folder for this author/title already exists on disk.
+
+    Mirrors the importer's naming (sanitize author + title), so it catches books
+    already present — imported by this app OR manually. Best-effort: a missing or
+    unreadable library yields False, never raises.
+    """
+    if not (title or "").strip():
+        return False
+    a = sanitize(author or "")
+    t = sanitize(title or "")
+    for base in library_check_dirs(media_type):
+        try:
+            if (Path(base) / a / t).is_dir():
+                return True
+        except OSError:
+            continue
+    return False
 
 def hardlink_one(src: Path, dst: Path):
     dst.parent.mkdir(parents=True, exist_ok=True)

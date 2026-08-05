@@ -226,7 +226,7 @@ function buildResultRow(it) {
   });
 
   tr.innerHTML = `
-    <td>${renderResultTitleCell(it)}${renderInHistoryBadge(it)}</td>
+    <td>${renderResultTitleCell(it)}${renderInHistoryBadge(it)}${renderInLibraryBadge(it)}</td>
     <td>${escapeHtml(it.author_info || '')}</td>
     <td>${escapeHtml(it.narrator_info || '')}</td>
     <td>${escapeHtml(it.format || '')}</td>
@@ -250,6 +250,11 @@ function renderInHistoryBadge(item) {
   if (!status) return '';
   const label = status === 'import_failed' ? 'In history (failed)' : 'In history';
   return `<div class="result-flags"><span class="result-badge result-badge-history">${escapeHtml(label)}</span></div>`;
+}
+
+function renderInLibraryBadge(item) {
+  if (!item?.in_library) return '';
+  return `<div class="result-flags"><span class="result-badge result-badge-library">In library</span></div>`;
 }
 
 let lastWedges = null;
