@@ -21,6 +21,15 @@
 - **Category**: bug
 - **Planned at**: commit `09f76cb`, 2026-08-08
 
+> **Post-execution correction (2026-08-08):** The original plan treated "same
+> row" as one logical flex container and explicitly preserved wrapping. The
+> maintainer's deployed acceptance test clarified that every badge must remain
+> on one *visual* line. Commit `006a439` supersedes the plan's CSS-out-of-scope
+> and wrap-preservation instructions: `.result-flags` now uses `nowrap`, its
+> badges cannot shrink, and narrow containers scroll horizontally instead of
+> moving "In library" below the other badges. This addendum preserves the
+> original plan as an execution record while documenting the accepted behavior.
+
 ## Why this matters
 
 Search results can display Freeleech, VIP, history, and library state. The

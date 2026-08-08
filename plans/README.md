@@ -70,12 +70,14 @@ return a separate `.result-flags` wrapper. Freeleech and VIP are built inside
 the title cell's own `.result-flags`, so history and library badges become
 additional block-level rows even when all badges fit horizontally.
 
-The existing `.result-flags` CSS already provides the intended flex row and
-responsive wrapping. The plan is therefore a surgical JavaScript-only fix:
-make the two status helpers return badge spans, collect all four badge types in
-`renderResultTitleCell`, and emit exactly one wrapper. It preserves natural
-wrapping on narrow screens, badge labels and styles, the Add action, and all
-backend behavior. Plan 038 depends on the merged Plan 036 implementation and is
+The initial plan consolidated the badge markup in JavaScript while deliberately
+preserving responsive wrapping. Post-deployment acceptance showed that this was
+too narrow an interpretation: although all badges shared one DOM group, the
+existing `flex-wrap:wrap` could still move "In library" to a second visual line.
+The accepted follow-up therefore also makes the badge group non-wrapping and
+horizontally scrollable when an exceptionally narrow value column cannot hold
+all labels. Badge text/styles, the Add action, and backend behavior remain
+unchanged. Plan 038 depends on the merged Plan 036 implementation and is
 independent of Plan 037 and the remaining TODO plans 031, 033, and 034.
 
 **Executed and reviewed 2026-08-08 — verdict APPROVE:** Luna implemented the
@@ -96,6 +98,15 @@ fixture outside the repository that loaded the committed `app.js`: all four
 badges share one desktop row and wrap within the same group at narrow width.
 The screenshot was inspected but not committed. The implementation worktree is
 clean; merging remains the maintainer's decision.
+
+**Post-deployment correction 2026-08-08:** The maintainer reported that the
+flag was still visually on a new line. Live inspection confirmed the deployed
+server already had commit `50909fd`; browser caching and container drift were
+ruled out. Commit `006a439` updates `app/templates/index.html` so
+`.result-flags` uses `flex-wrap:nowrap`, badges cannot shrink, and a narrow
+container scrolls horizontally rather than wrapping. A headless-browser check
+asserted identical badge vertical positions at desktop and narrow widths;
+`node --check`, `git diff --check`, and the full suite (**79 passed**) also pass.
 
 ## Targeted bug plan (2026-08-08) — plan 037
 
