@@ -226,7 +226,7 @@ function buildResultRow(it) {
   });
 
   tr.innerHTML = `
-    <td>${renderResultTitleCell(it)}${renderInHistoryBadge(it)}${renderInLibraryBadge(it)}</td>
+    <td>${renderResultTitleCell(it)}</td>
     <td>${escapeHtml(it.author_info || '')}</td>
     <td>${escapeHtml(it.narrator_info || '')}</td>
     <td>${escapeHtml(it.format || '')}</td>
@@ -249,12 +249,12 @@ function renderInHistoryBadge(item) {
   const status = historyMamIds.get(String(item?.id ?? ''));
   if (!status) return '';
   const label = status === 'import_failed' ? 'In history (failed)' : 'In history';
-  return `<div class="result-flags"><span class="result-badge result-badge-history">${escapeHtml(label)}</span></div>`;
+  return `<span class="result-badge result-badge-history">${escapeHtml(label)}</span>`;
 }
 
 function renderInLibraryBadge(item) {
   if (!item?.in_library) return '';
-  return `<div class="result-flags"><span class="result-badge result-badge-library">In library</span></div>`;
+  return `<span class="result-badge result-badge-library">In library</span>`;
 }
 
 let lastWedges = null;
@@ -307,6 +307,10 @@ function renderResultTitleCell(item) {
   if (item?.is_vip) {
     badges.push('<span class="result-badge result-badge-vip">VIP</span>');
   }
+  const historyBadge = renderInHistoryBadge(item);
+  if (historyBadge) badges.push(historyBadge);
+  const libraryBadge = renderInLibraryBadge(item);
+  if (libraryBadge) badges.push(libraryBadge);
 
   const badgesHtml = badges.length
     ? `<div class="result-flags">${badges.join('')}</div>`
