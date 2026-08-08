@@ -4,9 +4,11 @@ Lightweight web app and API for searching MyAnonamouse, sending downloads to Tra
 
 ## Screenshots
 
-| Desktop | Mobile |
+The current interface keeps search and result filters together in one unified panel on both desktop and mobile.
+
+| Unified desktop controls | Unified mobile controls |
 | --- | --- |
-| ![Desktop screenshot](app/static/screenshots/finder_desktop.png) | ![Mobile screenshot](app/static/screenshots/finder_mobile.png) |
+| ![MAM Book Finder unified search and filter panel on desktop](app/static/screenshots/finder_desktop.png) | ![MAM Book Finder unified search and filter panel on mobile](app/static/screenshots/finder_mobile.png) |
 
 ## What It Does
 
