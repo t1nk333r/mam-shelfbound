@@ -12,6 +12,9 @@ services:
       TRANSMISSION_PASS: ""
       # Download client: "transmission" (default) or "qbittorrent"
       TORRENT_CLIENT: "transmission"
+      # Audiobook imports: "hardlink" (default), "auto", or "copy".
+      # auto copies only when the filesystem does not support hardlinks.
+      AUDIOBOOK_IMPORT_MODE: "hardlink"
       # qBittorrent settings (used when TORRENT_CLIENT=qbittorrent)
       QB_URL: "http://qbittorrent:8080"
       QB_USER: ""

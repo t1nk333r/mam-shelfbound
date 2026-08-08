@@ -27,6 +27,8 @@ TRANSMISSION_NOSEND_LABEL = "kindle-nosend"
 DEFAULT_UMASK = "0002"
 DEFAULT_QB_CATEGORY = "mam-audiofinder"
 DEFAULT_NOTIFY_TIMEOUT = 10
+DEFAULT_AUDIOBOOK_IMPORT_MODE = "hardlink"
+AUDIOBOOK_IMPORT_MODES = ("hardlink", "auto", "copy")
 MEDIA_TYPE_AUDIOBOOK = "audiobook"
 MEDIA_TYPE_EBOOK = "ebook"
 MAM_MAIN_CATEGORIES = {
@@ -111,6 +113,13 @@ class Settings:
         self.TORRENT_CLIENT = os.getenv("TORRENT_CLIENT", "transmission").strip().lower()
         if self.TORRENT_CLIENT not in ("transmission", "qbittorrent"):
             raise RuntimeError("TORRENT_CLIENT must be 'transmission' or 'qbittorrent'")
+        self.AUDIOBOOK_IMPORT_MODE = os.getenv(
+            "AUDIOBOOK_IMPORT_MODE", DEFAULT_AUDIOBOOK_IMPORT_MODE
+        ).strip().lower()
+        if self.AUDIOBOOK_IMPORT_MODE not in AUDIOBOOK_IMPORT_MODES:
+            raise RuntimeError(
+                "AUDIOBOOK_IMPORT_MODE must be 'hardlink', 'auto', or 'copy'"
+            )
         self.QB_URL = os.getenv("QB_URL", "http://qbittorrent:8080").rstrip("/")
         self.QB_USER = os.getenv("QB_USER", "")
         self.QB_PASS = os.getenv("QB_PASS", "")
@@ -165,15 +174,19 @@ def db_dir_writable(db_url: str) -> str | None:
                 f"— chown it to the container's user")
     return None
 
-def hardlink_fs_warning(downloads: str, library: str) -> str | None:
-    """Return a warning if downloads and library exist on different filesystems
-    (audiobook imports hardlink between them and would fail with EXDEV), else None."""
+def hardlink_fs_warning(downloads: str, library: str, import_mode: str) -> str | None:
+    """Return a policy-aware warning for different download/library filesystems."""
     try:
         if os.path.isdir(downloads) and os.path.isdir(library):
             if os.stat(downloads).st_dev != os.stat(library).st_dev:
+                if import_mode == "copy":
+                    return None
+                if import_mode == "auto":
+                    return (f"{downloads!r} and {library!r} are on different filesystems; "
+                            "audiobook files will be copied instead of hardlinked, using extra disk space")
                 return (f"{downloads!r} and {library!r} are on different filesystems; "
-                        f"audiobook imports hardlink between them and will fail (EXDEV) — "
-                        f"put both on one filesystem")
+                        "audiobook imports hardlink between them and will fail (EXDEV) — "
+                        "put both on one filesystem or set AUDIOBOOK_IMPORT_MODE=auto")
     except OSError:
         return None
     return None
@@ -337,7 +350,7 @@ async def torrent_client_warning() -> str | None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    warn = hardlink_fs_warning(settings.DOWNLOADS_DIR, settings.LIBRARY_DIR)
+    warn = hardlink_fs_warning(settings.DOWNLOADS_DIR, settings.LIBRARY_DIR, settings.AUDIOBOOK_IMPORT_MODE)
     if warn:
         print(f"[preflight] WARNING: {warn}", file=sys.stderr)
     for d in (settings.LIBRARY_DIR, settings.EBOOKS_DIR, settings.EBOOKS_NOSEND_DIR):
@@ -1029,7 +1042,13 @@ def title_in_library(author: str, title: str, media_type: str) -> bool:
             continue
     return False
 
-def hardlink_one(src: Path, dst: Path):
+HARDLINK_COPY_FALLBACK_ERRNOS = frozenset(
+    getattr(errno, name)
+    for name in ("EXDEV", "EPERM", "EOPNOTSUPP", "ENOTSUP", "ENOSYS")
+    if hasattr(errno, name)
+)
+
+def hardlink_one(src: Path, dst: Path, *, fallback_to_copy: bool = False):
     dst.parent.mkdir(parents=True, exist_ok=True)
     try:
         os.link(src, dst)
@@ -1038,6 +1057,10 @@ def hardlink_one(src: Path, dst: Path):
     except FileExistsError:
         raise HTTPException(status_code=400, detail=f"Import destination already exists: {dst}")
     except OSError as exc:
+        if fallback_to_copy and exc.errno in HARDLINK_COPY_FALLBACK_ERRNOS:
+            logger.warning("Hardlink unavailable for %s -> %s (%s); copying instead", src, dst, exc)
+            copy_one(src, dst)
+            return
         if exc.errno == errno.EXDEV:
             detail = (
                 f"Could not hardlink '{src}' to '{dst}' because they are on different filesystems. "
@@ -1060,6 +1083,12 @@ def copy_one(src: Path, dst: Path):
     except OSError as exc:
         detail = f"Could not copy '{src}' to '{dst}': {exc.strerror or exc}"
         raise HTTPException(status_code=400, detail=detail)
+
+def import_audiobook_one(src: Path, dst: Path):
+    if settings.AUDIOBOOK_IMPORT_MODE == "copy":
+        copy_one(src, dst)
+        return
+    hardlink_one(src, dst, fallback_to_copy=settings.AUDIOBOOK_IMPORT_MODE == "auto")
 
 def clean_status_detail(detail: str | None) -> str | None:
     text_value = re.sub(r"\s+", " ", (detail or "").strip())
@@ -1272,7 +1301,7 @@ async def import_torrent_to_library(author: str, title: str, h: str, media_type:
     roots = {name.split("/", 1)[0] for name in names if "/" in name}
     common_root = next(iter(roots)) if len(roots) == 1 and all(name == next(iter(roots)) or name.startswith(next(iter(roots)) + "/") for name in names) else ""
 
-    import_one = hardlink_one if media_type == MEDIA_TYPE_AUDIOBOOK else copy_one
+    import_one = import_audiobook_one if media_type == MEDIA_TYPE_AUDIOBOOK else copy_one
 
     # Import all files (skip .cue). Audiobooks hardlink; ebooks copy.
     imported = 0

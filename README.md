@@ -14,7 +14,7 @@ Lightweight web app and API for searching MyAnonamouse, sending downloads to Tra
 - Add torrents to Transmission or qBittorrent with a dedicated label/category
 - Track download history
 - Show your MyAnonamouse freeleech-wedge and bonus-point balance in the header, refreshed on load and after each search or add
-- Auto-import completed audiobooks into `/library` using hardlinks
+- Auto-import completed audiobooks into `/library` using hardlinks by default, with opt-in copy fallback modes
 - Auto-import completed ebooks into `/ebooks-nosend` (default) or `/ebooks` (when `Send to Kindle` is checked) using copies
 - Import ebooks into `/ebooks-nosend` by default; check `Send to Kindle` before adding to import into `/ebooks` instead
 
@@ -41,9 +41,9 @@ Lightweight web app and API for searching MyAnonamouse, sending downloads to Tra
 
 4. Open the UI at `http://localhost:8080`.
 
-The app exposes `/downloads` and `/library` as symlinks into `/storage/downloads` and `/storage/audiobooks`. This keeps the app paths stable while allowing audiobook hardlinks to work.
+The app exposes `/downloads` and `/library` as symlinks into `/storage/downloads` and `/storage/audiobooks`. This keeps the app paths stable while allowing audiobook hardlinks to work. A shared filesystem remains recommended for space-efficient hardlinks. Separate filesystems work with `AUDIOBOOK_IMPORT_MODE=auto` or `copy`, but copies consume library space independently from torrent data. `hardlink` remains the default to avoid unexpected duplicate storage.
 
-If you run Transmission or qBittorrent in Docker, mount the same host media root or downloads subdirectory there so completed paths still resolve under `/downloads`. Downloads and the audiobook library must live on the same filesystem; otherwise audiobook imports fail and the History table shows `Failure` with the hardlink error. Ebook imports continue to copy into `/ebooks` or `/ebooks-nosend`.
+If you run Transmission or qBittorrent in Docker, mount the same host media root or downloads subdirectory there so completed paths still resolve under `/downloads`. In strict `hardlink` mode, downloads and the audiobook library need a shared filesystem; with separate filesystems imports fail and the History table shows `Failure` with the hardlink error. Ebook imports continue to copy into `/ebooks` or `/ebooks-nosend`.
 
 ### Run the published image
 
@@ -70,6 +70,7 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 | `TRANSMISSION_USER` | Transmission RPC username |
 | `TRANSMISSION_PASS` | Transmission RPC password |
 | `TORRENT_CLIENT` | Download client: `transmission` (default) or `qbittorrent` |
+| `AUDIOBOOK_IMPORT_MODE` | Audiobook import policy: `hardlink` (default), `auto` (copy when hardlinking is unsupported), or `copy` |
 | `QB_URL` | qBittorrent Web UI URL (used when `TORRENT_CLIENT=qbittorrent`) |
 | `QB_USER` | qBittorrent Web UI username |
 | `QB_PASS` | qBittorrent Web UI password |
@@ -82,13 +83,14 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 
 ### Download client
 
-`TORRENT_CLIENT` selects which download client the app talks to: `transmission` (default) or `qbittorrent`. When set to `qbittorrent`, set `QB_URL`, `QB_USER`, and `QB_PASS`, and optionally `QB_CATEGORY` (default `mam-audiofinder`) and `QB_TAGS`. qBittorrent's completed downloads must be visible at `/downloads` inside the app container — the same shared-mount requirement as Transmission — and downloads and the audiobook library must share one filesystem for hardlinks to work.
+`TORRENT_CLIENT` selects which download client the app talks to: `transmission` (default) or `qbittorrent`. When set to `qbittorrent`, set `QB_URL`, `QB_USER`, and `QB_PASS`, and optionally `QB_CATEGORY` (default `mam-audiofinder`) and `QB_TAGS`. qBittorrent's completed downloads must be visible at `/downloads` inside the app container — the same shared-mount requirement as Transmission. Both clients use the same audiobook import policy because both resolve completed data under `/downloads`; hardlinks require one filesystem, while `auto` and `copy` support separate filesystems.
 
 ## Notes
 
 - Search, add, and history are available from the main UI.
 - The `Send to Kindle` ebook toggle defaults **off**: new ebook adds are tagged `kindle-nosend` and imported into `/ebooks-nosend`. Check `Send to Kindle` before adding to send the ebook to Kindle and import it into `/ebooks` instead.
 - Failed imports show `Failure` in history and can be retried with the row's `Retry` button after fixing the underlying path, mount, or permission issue.
+- `AUDIOBOOK_IMPORT_MODE` is read at startup. After changing it, restart the container and use `Retry` on the failed History row; no re-add is required. `auto` falls back only for cross-device or unsupported-link errors (`EXDEV`, `EPERM`, `EOPNOTSUPP`/`ENOTSUP`, or `ENOSYS`). Access denied (`EACCES`), full disks, read-only destinations, corrupt I/O, and missing files remain failures.
 - The app has no authentication, so do not expose it directly to the public internet.
 - The status line above the results shows your current **freeleech wedges** and **bonus points** — MyAnonamouse's seed-bonus balance, formatted with thousands separators. Both are read from MAM when the page loads and refresh after each search or add. A field reads `unknown` when MAM does not return that value, and `unavailable` when the account lookup fails. The display is read-only and needs no configuration.
 - Freeleech wedges are spent automatically on audiobook adds. Set `FL_WEDGE_MIN_RESERVE` to keep a reserve — with `5`, the app stops using wedges once your balance reaches 5 and adds normally instead. The default `0` spends whenever any are available.
