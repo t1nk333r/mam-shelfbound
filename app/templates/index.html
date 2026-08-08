@@ -98,11 +98,12 @@
     th[data-sort-key] { cursor: pointer; user-select: none; white-space: nowrap; }
     th[data-sort-key]:hover { color: var(--text); }
     .sort-ind { color: var(--accent); font-size: 0.8em; }
-    .result-title-cell { display:flex; flex-direction:column; gap:0.35rem; }
+    .result-title-cell { display:flex; flex-direction:column; gap:0.35rem; min-width:0; }
     .result-title-main { font-weight:600; }
-    .result-flags { display:flex; gap:0.35rem; flex-wrap:wrap; }
+    .result-flags { display:flex; gap:0.35rem; flex-wrap:nowrap; overflow-x:auto; }
     .result-badge {
       display:inline-flex;
+      flex:0 0 auto;
       align-items:center;
       padding:0.15rem 0.45rem;
       border:1px solid transparent;
