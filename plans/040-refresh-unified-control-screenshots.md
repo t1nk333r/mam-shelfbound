@@ -21,6 +21,34 @@
 - **Category**: docs
 - **Planned at**: commit `98e25d9`, 2026-08-08
 
+**Execution attempt 2026-08-08 — BLOCKED before dispatch:** Docker Publish run
+`31275335337` completed successfully for `e06d66c`, but the operator-provided
+deployment at `http://10.10.10.9:8090/` still returned
+`<form id="searchForm" class="row">` and no `search-filter-panel` marker.
+This matches the Step 1 STOP condition. No executor was dispatched and no
+screenshot asset was changed. Redeploy/recreate the service from the newly
+published image, then rerun this plan.
+
+**Retry 2026-08-08 — gate cleared:** the same deployment now returns both the
+`.search-filter-panel` style and unified-panel markup. Execution may proceed in
+an isolated worktree.
+
+**Executed and reviewed 2026-08-08 — verdict APPROVE:** Luna captured the live
+published UI in isolated worktree `/tmp/mam-audiofinder-plan040-luna`, branch
+`advisor/040-refresh-unified-control-screenshots`, commit `d5ec83b`. The commit
+changes exactly the two intended PNGs. Desktop is 2400×1560 (362,062 bytes)
+and mobile is 1290×2796 (248,556 bytes); both pass PNG signature, size,
+metadata, chunk-structure, README-link, scope, and diff-hygiene checks.
+
+Review required one revision because the first captures included Chromium's
+vertical scrollbar gutter and arrow controls. Luna recaptured both viewports
+with browser scrollbars hidden and amended the focused commit. Original-detail
+inspection of the final images confirms the shared search/filter panel,
+full-width mobile seeders field, sanitized account line, consistent live search
+state, intact result badges, and absence of History, host details, credentials,
+focus artifacts, DevTools, and browser chrome. The executor worktree is clean;
+merging remains the maintainer's decision.
+
 ## Why this matters
 
 The README is the project's first visual explanation, but its desktop and

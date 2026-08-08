@@ -59,7 +59,7 @@ commit messages are short and present-tense with no prefixes.
 | 037 | Configurable audiobook hardlink-to-copy fallback | P1 | M | — | BLOCKED — code approved; live cross-filesystem/client validation pending |
 | 038 | Keep all result badges in one shared row | P2 | S | 036 (DONE) | DONE |
 | 039 | Unify search and filter controls in one panel | P3 | S | 016 (DONE) | DONE |
-| 040 | Refresh README screenshots after unified controls ship | P3 | S | 039 (DONE) + published build | TODO |
+| 040 | Refresh README screenshots after unified controls ship | P3 | S | 039 (DONE) + published build | DONE |
 
 Status values: TODO | IN PROGRESS | DONE | BLOCKED (one-line reason) | REJECTED (one-line rationale) | REVIEW (design deliverable, no code to execute)
 
