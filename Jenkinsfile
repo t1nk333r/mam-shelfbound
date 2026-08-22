@@ -16,6 +16,8 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
+          export UV_CACHE_DIR="$WORKSPACE/.uv-cache"
+          export UV_PYTHON_INSTALL_DIR="$WORKSPACE/.uv-python"
           uv venv --clear --python 3.12 .venv
           . .venv/bin/activate
           uv pip install -r requirements.txt -r requirements-dev.txt
