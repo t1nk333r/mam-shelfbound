@@ -32,7 +32,7 @@ pipeline {
       steps {
         sh '''
           set -euo pipefail
-          IMAGE="mam-audiofinder-transmission-qbit:ci-${BUILD_NUMBER}"
+          IMAGE="mam-shelfbound:ci-${BUILD_NUMBER}"
           docker build --build-arg APP_VERSION="ci-${BUILD_NUMBER}" -t "$IMAGE" .
           docker run --rm \
             -e MAM_COOKIE=ci-cookie \
@@ -45,7 +45,7 @@ pipeline {
 
   post {
     always {
-      sh 'docker image rm -f "mam-audiofinder-transmission-qbit:ci-${BUILD_NUMBER}" || true'
+      sh 'docker image rm -f "mam-shelfbound:ci-${BUILD_NUMBER}" || true'
     }
   }
 }

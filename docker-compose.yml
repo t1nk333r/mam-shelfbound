@@ -1,8 +1,8 @@
 services:
-  mam-audiofinder:
+  mam-shelfbound:
     # `up --build` uses the checked-out source; `pull` can use the published GHCR image.
     build: .
-    container_name: mam-audiofinder
+    container_name: mam-shelfbound
     ports:
       - "8080:8080"
     environment:
@@ -19,6 +19,7 @@ services:
       QB_URL: "http://qbittorrent:8080"
       QB_USER: ""
       QB_PASS: ""
+      # Keep the established category so existing qBittorrent downloads remain tracked.
       QB_CATEGORY: "mam-audiofinder"
       # Stop auto-spending freeleech wedges once the balance drops to this many.
       # 0 (default) = spend whenever any are available.

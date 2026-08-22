@@ -13,7 +13,7 @@ from sqlalchemy.engine import make_url
 from datetime import datetime, timezone
 from contextlib import asynccontextmanager
 
-logger = logging.getLogger("mam_audiofinder")
+logger = logging.getLogger("mam_shelfbound")
 
 # ---------------------------- Config ----------------------------
 DOWNLOADS_DIR = "/downloads"
@@ -417,7 +417,7 @@ async def lifespan(app: FastAPI):
     finally:
         await stop_auto_import_task()
 
-app = FastAPI(title="MAM Book Finder", version=APP_VERSION, lifespan=lifespan)
+app = FastAPI(title="MAM-Shelfbound", version=APP_VERSION, lifespan=lifespan)
 app.state.auto_import_task = None
 app.state.auto_import_stop = None
 

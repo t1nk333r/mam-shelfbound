@@ -1,4 +1,4 @@
-# MAM Book Finder
+# MAM-Shelfbound
 
 Lightweight web app and API for searching MyAnonamouse, sending downloads to Transmission or qBittorrent, and importing completed books into audiobook and ebook libraries.
 
@@ -8,7 +8,7 @@ The current interface keeps search and result filters together in one unified pa
 
 | Unified desktop controls | Unified mobile controls |
 | --- | --- |
-| ![MAM Book Finder unified search and filter panel on desktop](app/static/screenshots/finder_desktop.png) | ![MAM Book Finder unified search and filter panel on mobile](app/static/screenshots/finder_mobile.png) |
+| ![MAM-Shelfbound unified search and filter panel on desktop](app/static/screenshots/finder_desktop.png) | ![MAM-Shelfbound unified search and filter panel on mobile](app/static/screenshots/finder_mobile.png) |
 
 ## What It Does
 
@@ -53,13 +53,13 @@ The Quick Start above builds from source. To run a prebuilt image instead, set `
 
 ```yaml
 services:
-  mam-audiofinder:
-    image: ghcr.io/d7eeem/mam-audiofinder-transmission-qbit:latest   # or pin a release, e.g. :v0.0.4
+  mam-shelfbound:
+    image: ghcr.io/d7eeem/mam-shelfbound:latest   # or pin a release, e.g. :v1.0.17
 ```
 
-Release images are published to GitHub Container Registry at `ghcr.io/d7eeem/mam-audiofinder-transmission-qbit` on every tagged release.
+Release images are published to GitHub Container Registry at `ghcr.io/d7eeem/mam-shelfbound` on every tagged release.
 
-> **Note:** releases through `v0.0.3` were published under the repository's former name, at `ghcr.io/d7eeem/mam-audiofinder-transmission`. `v0.0.4` onward use the `-qbit` path above.
+> **Note:** earlier releases use the former GitHub Container Registry paths: `ghcr.io/d7eeem/mam-audiofinder-transmission` and `ghcr.io/d7eeem/mam-audiofinder-transmission-qbit`.
 
 ## Configuration
 
@@ -76,7 +76,7 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 | `QB_URL` | qBittorrent Web UI URL (used when `TORRENT_CLIENT=qbittorrent`) |
 | `QB_USER` | qBittorrent Web UI username |
 | `QB_PASS` | qBittorrent Web UI password |
-| `QB_CATEGORY` | qBittorrent category applied to adds and used to find completed downloads (default `mam-audiofinder`) |
+| `QB_CATEGORY` | qBittorrent category applied to adds and used to find completed downloads (default `mam-audiofinder`, retained for upgrade compatibility) |
 | `QB_TAGS` | Extra comma-separated qBittorrent tags applied to adds, in addition to the `mamid=` tag |
 | `FL_WEDGE_MIN_RESERVE` | Keep this many freeleech wedges unspent (0 = spend freely) |
 | `NOTIFY_WEBHOOK_URL` | Optional webhook for import-failure notifications (empty = disabled) |
@@ -85,7 +85,7 @@ Runtime config comes from environment variables in `docker-compose.yml`.
 
 ### Download client
 
-`TORRENT_CLIENT` selects which download client the app talks to: `transmission` (default) or `qbittorrent`. When set to `qbittorrent`, set `QB_URL`, `QB_USER`, and `QB_PASS`, and optionally `QB_CATEGORY` (default `mam-audiofinder`) and `QB_TAGS`. qBittorrent's completed downloads must be visible at `/downloads` inside the app container — the same shared-mount requirement as Transmission. Both clients use the same audiobook import policy because both resolve completed data under `/downloads`; hardlinks require one filesystem, while `auto` and `copy` support separate filesystems.
+`TORRENT_CLIENT` selects which download client the app talks to: `transmission` (default) or `qbittorrent`. When set to `qbittorrent`, set `QB_URL`, `QB_USER`, and `QB_PASS`, and optionally `QB_CATEGORY` (default `mam-audiofinder`, retained for upgrade compatibility) and `QB_TAGS`. qBittorrent's completed downloads must be visible at `/downloads` inside the app container — the same shared-mount requirement as Transmission. Both clients use the same audiobook import policy because both resolve completed data under `/downloads`; hardlinks require one filesystem, while `auto` and `copy` support separate filesystems.
 
 ## Notes
 
