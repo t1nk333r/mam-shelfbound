@@ -176,6 +176,11 @@ async def fetch_freeleech_wedge_count(client: httpx.AsyncClient) -> int | None:
         return None
     return value if value >= 0 else None
 
+def mam_account_is_authenticated(data: dict) -> bool:
+    """Return whether the MAM account response represents a logged-in user."""
+    uid = data.get("uid")
+    return uid is not None and str(uid).strip() != ""
+
 # ---------------------------- App ----------------------------
 app = FastAPI(title="MAM Book Finder", version=APP_VERSION)
 app.state.auto_import_task = None
@@ -183,6 +188,25 @@ app.state.auto_import_stop = None
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
+
+@app.get("/health/mam")
+async def mam_health():
+    """Perform a bounded, read-only check that the configured MAM cookie works."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            data = await fetch_account_summary(client)
+    except HTTPException as exc:
+        logger.warning("MAM health check failed: %s", exc.detail)
+        return JSONResponse(status_code=503, content={"status": "unhealthy"})
+    except httpx.HTTPError as exc:
+        logger.warning("MAM health check request failed: %s", exc)
+        return JSONResponse(status_code=503, content={"status": "unhealthy"})
+
+    if not mam_account_is_authenticated(data):
+        logger.warning("MAM health check returned an unauthenticated account response")
+        return JSONResponse(status_code=503, content={"status": "unhealthy"})
+
+    return {"status": "ok"}
 
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
