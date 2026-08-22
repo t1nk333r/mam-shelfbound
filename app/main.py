@@ -59,6 +59,57 @@ def validate_mam_id(mam_id: str) -> str:
         raise HTTPException(status_code=400, detail="Invalid MAM id")
     return mam_id
 
+def is_torrent_metainfo(payload: bytes) -> bool:
+    """Return whether *payload* has the minimal shape of a bencoded torrent.
+
+    MAM can return an HTML sign-in/error page with a successful HTTP status.
+    Passing that page on to a torrent client produces an opaque add failure, so
+    catch it at the boundary where a useful MAM-session error can be shown.
+    """
+    if not payload or payload[:1] != b"d":
+        return False
+
+    def parse(pos: int):
+        if pos >= len(payload):
+            raise ValueError("unexpected end of bencode")
+        token = payload[pos:pos + 1]
+        if token == b"i":
+            end = payload.index(b"e", pos + 1)
+            int(payload[pos + 1:end])
+            return None, end + 1
+        if token == b"l":
+            pos += 1
+            while payload[pos:pos + 1] != b"e":
+                _, pos = parse(pos)
+            return None, pos + 1
+        if token == b"d":
+            result = {}
+            pos += 1
+            while payload[pos:pos + 1] != b"e":
+                key, pos = parse(pos)
+                value, pos = parse(pos)
+                result[key] = value
+            return result, pos + 1
+        if token.isdigit():
+            colon = payload.index(b":", pos)
+            size = int(payload[pos:colon])
+            start = colon + 1
+            end = start + size
+            if end > len(payload):
+                raise ValueError("short bencode string")
+            return payload[start:end], end
+        raise ValueError("invalid bencode token")
+
+    try:
+        root, end = parse(0)
+    except (TypeError, ValueError, IndexError):
+        return False
+    return (
+        end == len(payload)
+        and isinstance(root, dict)
+        and isinstance(root.get(b"info"), dict)
+    )
+
 def should_use_freeleech(media_type: str, wedges: int | None, reserve: int) -> bool:
     """Decide whether to spend a freeleech wedge on this add.
 
@@ -616,6 +667,13 @@ def insert_history(
             "status_updated_at": added_at,
         })
 
+def history_exists_for_mam_id(mam_id: str) -> bool:
+    """Avoid submitting a torrent that this app has already recorded."""
+    with engine.begin() as cx:
+        return cx.execute(text("""
+            SELECT 1 FROM history WHERE mam_id = :mam_id LIMIT 1
+        """), {"mam_id": mam_id}).first() is not None
+
 # ---------------------------- Add-to-Transmission ----------------------------
 class AddBody(BaseModel):
     id: str | int | None = None
@@ -640,6 +698,12 @@ async def add_to_transmission(body: AddBody):
         raise HTTPException(status_code=400, detail="Missing MAM id")
     mam_id = validate_mam_id(mam_id)
 
+    # The search table may be stale or a user may double-click Add. Treat an
+    # already-recorded item as success instead of asking qBittorrent to add a
+    # duplicate (which it reports only as the unhelpful text "Fails.").
+    if history_exists_for_mam_id(mam_id):
+        return {"ok": True, "already_added": True}
+
     freeleech_wedges = None
     use_fl = False
     used_fl = False
@@ -662,6 +726,12 @@ async def add_to_transmission(body: AddBody):
         if resp is None or resp.status_code != 200 or not resp.content:
             status = "unknown" if resp is None else resp.status_code
             raise HTTPException(status_code=502, detail=f"Could not fetch .torrent from MAM (status: {status}).")
+        if not is_torrent_metainfo(resp.content):
+            raise HTTPException(
+                status_code=422,
+                detail=("MAM did not return a valid torrent file. Your MAM session may have expired; "
+                        "refresh MAM_COOKIE and try again."),
+            )
 
         torrent_hash = await get_torrent_client().add_torrent(resp.content, mam_id, media_type, send_to_kindle)
         insert_history(mam_id, title, author, narrator, media_type, send_to_kindle, dl, torrent_hash)
@@ -911,7 +981,18 @@ class QbittorrentClient(TorrentClient):
             files = {"torrents": ("mam.torrent", metainfo, "application/x-bittorrent")}
             r = await client.post(f"{settings.QB_URL}/api/v2/torrents/add", data=data, files=files)
             if r.status_code != 200 or "Ok" not in (r.text or ""):
-                raise HTTPException(status_code=502, detail=f"qBittorrent add failed: {r.status_code} {r.text[:160]}")
+                # qBittorrent answers duplicate adds with HTTP 200 and the
+                # otherwise useless body "Fails.". If it has our tag, the
+                # requested torrent is already there and can be recorded as a
+                # successful add instead of surfacing a false failure.
+                existing_hash = await self._find_added_hash(client, mam_id, attempts=1)
+                if existing_hash:
+                    return existing_hash
+                raise HTTPException(
+                    status_code=422,
+                    detail=("qBittorrent rejected the torrent. Check its Web UI logs: it may already "
+                            "exist, be invalid, or qBittorrent may not be able to use its download folder."),
+                )
             if not mam_id:
                 return None
             return await self._find_added_hash(client, mam_id)

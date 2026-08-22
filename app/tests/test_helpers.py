@@ -117,6 +117,12 @@ def test_validate_mam_id_rejects_query_injection():
             main.validate_mam_id(bad)
 
 
+def test_is_torrent_metainfo_accepts_bencoded_metainfo_and_rejects_html():
+    assert main.is_torrent_metainfo(b"d4:infod4:name4:Bookee") is True
+    assert main.is_torrent_metainfo(b"<html>Please sign in</html>") is False
+    assert main.is_torrent_metainfo(b"d4:info4:Book") is False
+
+
 def test_should_use_freeleech_respects_reserve_and_media_type():
     AB = main.MEDIA_TYPE_AUDIOBOOK
     EB = main.MEDIA_TYPE_EBOOK
