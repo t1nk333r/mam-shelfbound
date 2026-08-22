@@ -196,8 +196,9 @@ function buildResultRow(it) {
   const tr = document.createElement('tr');
   const detailsURL = it.id ? `https://www.myanonamouse.net/t/${encodeURIComponent(it.id)}` : '';
   const addBtn = document.createElement('button');
-  addBtn.textContent = 'Add';
-  addBtn.disabled = !(it.dl || it.id);
+  const alreadyAdded = historyMamIds.has(String(it.id ?? ''));
+  addBtn.textContent = alreadyAdded ? 'Added' : 'Add';
+  addBtn.disabled = alreadyAdded || !(it.dl || it.id);
   addBtn.addEventListener('click', async () => {
     addBtn.disabled = true;
     addBtn.textContent = 'Adding...';
@@ -216,11 +217,14 @@ function buildResultRow(it) {
         })
       });
       setAccountStatus(result?.freeleech_wedges);
-      addBtn.textContent = 'Added';
+      addBtn.textContent = result?.already_added ? 'Already added' : 'Added';
       await loadHistory();
     } catch (e) {
-      console.error(e);
-      addBtn.textContent = 'Error';
+      console.warn('add failed', e);
+      const message = String(e?.message || 'The torrent could not be added.')
+        .replace(/^HTTP \d+\s*-\s*/, '');
+      statusEl.textContent = `Could not add “${it.title || 'this item'}”: ${message}`;
+      addBtn.textContent = 'Try again';
       addBtn.disabled = false;
     }
   });

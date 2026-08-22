@@ -58,12 +58,26 @@ def test_add_torrent_audiobook_has_no_nosend_tag():
 
 
 @respx.mock
-def test_add_torrent_raises_502_when_add_rejected():
+def test_add_torrent_reports_clear_error_when_add_rejected():
     _login_ok()
     respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=Response(200, text="Fails."))
+    respx.get(f"{QB}/api/v2/torrents/info").mock(return_value=Response(200, json=[]))
     with pytest.raises(HTTPException) as exc:
         asyncio.run(main.QbittorrentClient().add_torrent(b"B", "1", "audiobook", True))
-    assert exc.value.status_code == 502
+    assert exc.value.status_code == 422
+    assert "qBittorrent rejected the torrent" in exc.value.detail
+
+
+@respx.mock
+def test_add_torrent_accepts_existing_tag_when_qb_reports_fails():
+    _login_ok()
+    respx.post(f"{QB}/api/v2/torrents/add").mock(return_value=Response(200, text="Fails."))
+    respx.get(f"{QB}/api/v2/torrents/info").mock(
+        return_value=Response(200, json=[{"hash": "EXISTS", "added_on": 1}]))
+
+    got = asyncio.run(main.QbittorrentClient().add_torrent(b"B", "1", "audiobook", True))
+
+    assert got == "EXISTS"
 
 
 @respx.mock
