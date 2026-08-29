@@ -1,4 +1,4 @@
-// Jenkins CI/CD for the multibranch job discovered under the d7eeem organization
+// Jenkins CI/CD for the multibranch job discovered under the organization
 // folder. This pipeline owns publishing: it tests, builds, pushes the container
 // image to GHCR, and cuts the release tag. The GitHub Actions workflow is
 // limited to running the test suite.
@@ -44,10 +44,10 @@ pipeline {
 
   environment {
     REGISTRY = 'ghcr.io'
-    // Published image path. Kept separate from the git remote on purpose: the
-    // repository lives under a personal account, images stay on the documented
-    // ghcr.io/d7eeem path that README.md and existing deployments point at.
-    IMAGE_REPO = 'ghcr.io/d7eeem/mam-shelfbound'
+    // Published image path. Must be a namespace the push credential owns:
+    // the former d7eeem owner no longer exists on GHCR and rejects pushes
+    // with "not_found: owner not found".
+    IMAGE_REPO = 'ghcr.io/t1nk333r/mam-shelfbound'
     // PAT with write:packages, used for the registry push.
     GHCR_CREDENTIALS_ID = 'ghcr-pat'
     // PAT with repo scope, used to push the release tag and create the

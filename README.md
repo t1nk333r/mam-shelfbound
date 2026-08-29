@@ -54,12 +54,12 @@ The Quick Start above builds from source. To run a prebuilt image instead, set `
 ```yaml
 services:
   mam-shelfbound:
-    image: ghcr.io/d7eeem/mam-shelfbound:latest   # or pin a release, e.g. :v1.0.17
+    image: ghcr.io/t1nk333r/mam-shelfbound:latest   # or pin a release, e.g. :v0.0.19
 ```
 
-Release images are published to GitHub Container Registry at `ghcr.io/d7eeem/mam-shelfbound` on every tagged release.
+Release images are published to GitHub Container Registry at `ghcr.io/t1nk333r/mam-shelfbound` on every build of the default branch.
 
-> **Note:** earlier releases use the former GitHub Container Registry paths: `ghcr.io/d7eeem/mam-audiofinder-transmission` and `ghcr.io/d7eeem/mam-audiofinder-transmission-qbit`.
+> **Note:** earlier releases were published under the former `d7eeem` owner, and under the former image names `mam-audiofinder-transmission` and `mam-audiofinder-transmission-qbit`. Those paths are no longer resolvable.
 
 ## Configuration
 
