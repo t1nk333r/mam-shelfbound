@@ -1,0 +1,34 @@
+# Test-only workflow. Building, publishing to GHCR, and cutting release tags
+# are owned by the Jenkins pipeline in the repository root Jenkinsfile.
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Syntax check
+        run: python -m py_compile app/main.py
+      - name: Run tests
+        run: cd app && python -m pytest -q
