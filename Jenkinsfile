@@ -88,29 +88,74 @@ pipeline {
         sh '''
           set -euo pipefail
 
-          if ! docker buildx version >/dev/null 2>&1; then
-            echo "docker buildx is required to publish multi-platform images." >&2
-            echo "Install the buildx plugin on this agent, or set PLATFORMS=linux/amd64." >&2
-            exit 1
+          # Work out what this agent can actually build, and record it for the
+          # build stages. Anything unavailable degrades the build rather than
+          # failing it, so a missing buildx plugin or a docker daemon that will
+          # not run privileged containers still produces a published image.
+          builder=""
+          platforms="linux/amd64"
+
+          if docker buildx version >/dev/null 2>&1; then
+            # The default "docker" driver cannot build multi-platform images.
+            if ! docker buildx inspect "$BUILDX_BUILDER" >/dev/null 2>&1; then
+              docker buildx create --name "$BUILDX_BUILDER" --driver docker-container --bootstrap || true
+            fi
+
+            if docker buildx inspect "$BUILDX_BUILDER" >/dev/null 2>&1; then
+              builder="$BUILDX_BUILDER"
+            else
+              echo "WARNING: could not create a docker-container builder; using the default builder." >&2
+            fi
+
+            supported="$(docker buildx inspect --bootstrap ${builder:+"$builder"} 2>/dev/null | grep -i '^Platforms:' || true)"
+            case "$PLATFORMS" in
+              *arm64*)
+                case "$supported" in
+                  *linux/arm64*) ;;
+                  *)
+                    # Register the qemu handlers, then look again.
+                    docker run --privileged --rm tonistiigi/binfmt --install arm64 >/dev/null 2>&1 || true
+                    supported="$(docker buildx inspect --bootstrap ${builder:+"$builder"} 2>/dev/null | grep -i '^Platforms:' || true)"
+                    ;;
+                esac
+                case "$supported" in
+                  *linux/arm64*) platforms="$PLATFORMS" ;;
+                  *)
+                    echo "WARNING: this agent cannot build linux/arm64 (no qemu/binfmt handlers)." >&2
+                    echo "WARNING: publishing linux/amd64 only. The build is marked unstable." >&2
+                    ;;
+                esac
+                ;;
+              *)
+                platforms="$PLATFORMS"
+                ;;
+            esac
+          else
+            echo "WARNING: docker buildx is not installed; publishing linux/amd64 only." >&2
           fi
 
-          # The default "docker" driver cannot build multi-platform images, so
-          # use a dedicated docker-container builder.
-          if ! docker buildx inspect "$BUILDX_BUILDER" >/dev/null 2>&1; then
-            docker buildx create --name "$BUILDX_BUILDER" --driver docker-container --bootstrap
-          fi
-          docker buildx use "$BUILDX_BUILDER"
+          {
+            echo "BUILDER=$builder"
+            echo "BUILD_PLATFORMS=$platforms"
+          } > buildx.env
 
-          case "$PLATFORMS" in
-            *arm64*)
-              if ! docker run --privileged --rm tonistiigi/binfmt --install arm64; then
-                echo "Could not register arm64 binfmt handlers on this agent." >&2
-                echo "Set PLATFORMS=linux/amd64 in the Jenkinsfile to build amd64 only." >&2
-                exit 1
-              fi
-              ;;
-          esac
+          echo "Builder: ${builder:-<default>}"
+          echo "Platforms: $platforms"
         '''
+        script {
+          def requested = env.PLATFORMS
+          def effective = readFile('buildx.env')
+            .split('\n')
+            .find { it.startsWith('BUILD_PLATFORMS=') }
+            ?.substring('BUILD_PLATFORMS='.length())
+            ?.trim()
+          env.BUILD_PLATFORMS = effective
+          if (effective != requested) {
+            // Visible in the build history rather than buried in the log: a
+            // published image missing an architecture is easy to miss.
+            unstable("Building ${effective} instead of ${requested}")
+          }
+        }
       }
     }
 
@@ -224,8 +269,10 @@ EOF
 
           # Single-platform --load build so the image is runnable locally; the
           # multi-platform push below reuses this layer cache.
+          . ./buildx.env
+
           docker buildx build \
-            --builder "$BUILDX_BUILDER" \
+            ${BUILDER:+--builder "$BUILDER"} \
             --platform linux/amd64 \
             --build-arg APP_VERSION="$version" \
             -t "$IMAGE" \
@@ -258,9 +305,11 @@ EOF
                 tag_args="$tag_args -t $ref"
               done < docker-tags.txt
 
+              . ./buildx.env
+
               docker buildx build \
-                --builder "$BUILDX_BUILDER" \
-                --platform "$PLATFORMS" \
+                ${BUILDER:+--builder "$BUILDER"} \
+                --platform "$BUILD_PLATFORMS" \
                 --build-arg APP_VERSION="$version" \
                 --label "org.opencontainers.image.version=$version" \
                 --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
