@@ -143,17 +143,14 @@ pipeline {
           echo "Platforms: $platforms"
         '''
         script {
-          def requested = env.PLATFORMS
-          def effective = readFile('buildx.env')
-            .split('\n')
-            .find { it.startsWith('BUILD_PLATFORMS=') }
-            ?.substring('BUILD_PLATFORMS='.length())
-            ?.trim()
-          env.BUILD_PLATFORMS = effective
-          if (effective != requested) {
+          env.BUILD_PLATFORMS = sh(
+            script: "sed -n 's/^BUILD_PLATFORMS=//p' buildx.env",
+            returnStdout: true
+          ).trim()
+          if (env.BUILD_PLATFORMS != env.PLATFORMS) {
             // Visible in the build history rather than buried in the log: a
             // published image missing an architecture is easy to miss.
-            unstable("Building ${effective} instead of ${requested}")
+            unstable("Building ${env.BUILD_PLATFORMS} instead of ${env.PLATFORMS}")
           }
         }
       }
@@ -250,13 +247,12 @@ EOF
           cat docker-tags.txt
         '''
         script {
-          readFile('version.env').split('\n').each { line ->
-            def entry = line.trim()
-            if (entry) {
-              def split = entry.indexOf('=')
-              env[entry.substring(0, split)] = entry.substring(split + 1)
-            }
-          }
+          // Read the values back with sh rather than parsing in Groovy: the
+          // sandbox rejects dynamic subscript assignment on env.
+          env.APP_VERSION = sh(script: "sed -n 's/^version=//p' version.env", returnStdout: true).trim()
+          env.RELEASE_TAG = sh(script: "sed -n 's/^tag=//p' version.env", returnStdout: true).trim()
+          env.PUBLISH = sh(script: "sed -n 's/^publish=//p' version.env", returnStdout: true).trim()
+          env.CREATE_TAG = sh(script: "sed -n 's/^create_tag=//p' version.env", returnStdout: true).trim()
         }
       }
     }
@@ -274,7 +270,7 @@ EOF
           docker buildx build \
             ${BUILDER:+--builder "$BUILDER"} \
             --platform linux/amd64 \
-            --build-arg APP_VERSION="$version" \
+            --build-arg APP_VERSION="$APP_VERSION" \
             -t "$IMAGE" \
             --load \
             .
@@ -289,7 +285,7 @@ EOF
 
     stage('Push image') {
       when {
-        expression { env.publish == 'true' }
+        expression { env.PUBLISH == 'true' }
       }
       steps {
         script {
@@ -310,8 +306,8 @@ EOF
               docker buildx build \
                 ${BUILDER:+--builder "$BUILDER"} \
                 --platform "$BUILD_PLATFORMS" \
-                --build-arg APP_VERSION="$version" \
-                --label "org.opencontainers.image.version=$version" \
+                --build-arg APP_VERSION="$APP_VERSION" \
+                --label "org.opencontainers.image.version=$APP_VERSION" \
                 --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
                 --label "org.opencontainers.image.source=https://github.com/$(git remote get-url origin | sed -E 's#.*github\\.com[:/]##; s#\\.git$##')" \
                 --cache-from "type=registry,ref=${IMAGE_REPO}:buildcache" \
@@ -327,7 +323,7 @@ EOF
 
     stage('Release') {
       when {
-        expression { env.create_tag == 'true' }
+        expression { env.CREATE_TAG == 'true' }
       }
       steps {
         script {
@@ -337,8 +333,8 @@ EOF
 
               slug="$(git remote get-url origin | sed -E 's#.*github\\.com[:/]##; s#\\.git$##')"
 
-              git -c user.name="jenkins" -c user.email="jenkins@localhost" tag "$tag"
-              git push "https://${CRED_USER}:${CRED_TOKEN}@github.com/${slug}.git" "refs/tags/${tag}"
+              git -c user.name="jenkins" -c user.email="jenkins@localhost" tag "$RELEASE_TAG"
+              git push "https://${CRED_USER}:${CRED_TOKEN}@github.com/${slug}.git" "refs/tags/${RELEASE_TAG}"
 
               notes="Published container image:"
               while IFS= read -r ref; do
@@ -357,10 +353,10 @@ EOF
                 -H "Authorization: Bearer ${CRED_TOKEN}" \
                 -H "Accept: application/vnd.github+json" \
                 "https://api.github.com/repos/${slug}/releases" \
-                -d "{\\"tag_name\\":\\"${tag}\\",\\"name\\":\\"${tag}\\",\\"generate_release_notes\\":true,\\"body\\":${body}}" \
+                -d "{\\"tag_name\\":\\"${RELEASE_TAG}\\",\\"name\\":\\"${RELEASE_TAG}\\",\\"generate_release_notes\\":true,\\"body\\":${body}}" \
                 > /dev/null
 
-              echo "Released ${tag}"
+              echo "Released ${RELEASE_TAG}"
             '''
           }
         }
