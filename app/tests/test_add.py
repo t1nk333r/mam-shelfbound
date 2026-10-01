@@ -8,10 +8,13 @@ import pytest
 import respx
 from fastapi import HTTPException
 from httpx import Response
+from sqlalchemy import create_engine
 
 import main
 
 MAM = main.DEFAULT_MAM_BASE
+PLAIN_URL = f"{MAM}/tor/download.php?tid=42"
+FL_URL = f"{MAM}/tor/download.php?tid=42&fl=1"
 TORRENT = b"d4:infod4:name4:booke6:lengthi1ee"
 HTML_PAGE = b"<html><body>Not logged in</body></html>"
 
@@ -29,10 +32,11 @@ class FakeClient:
 
 
 @pytest.fixture
-def client(monkeypatch):
-    with main.engine.begin() as cx:
-        cx.exec_driver_sql("DROP TABLE IF EXISTS history")
+def client(monkeypatch, tmp_path):
+    # A private DB per test, so assertions on its rows can't race other runs.
+    monkeypatch.setattr(main, "engine", create_engine(f"sqlite:///{tmp_path}/history.db", future=True))
     main.ensure_history_schema()
+    monkeypatch.setattr(main.settings, "FL_WEDGE_MIN_RESERVE", 0)
     fake = FakeClient()
     monkeypatch.setattr(main, "get_torrent_client", lambda: fake)
     return fake
@@ -82,7 +86,7 @@ def test_add_succeeds_when_account_lookup_returns_error(client, media_type):
     result = add(media_type)
 
     assert result == {"ok": True}                 # no wedge count: page keeps its last value
-    assert calls == [f"{MAM}/tor/download.php?tid=42"]   # no freeleech without a known count
+    assert calls == [PLAIN_URL]                    # no freeleech without a known count
     assert client.added == [TORRENT]
     assert history_hashes() == ["HASH42"]
 
@@ -97,14 +101,32 @@ def test_add_succeeds_when_account_lookup_has_network_error(client):
 
 
 @respx.mock
+def test_add_returns_known_zero_wedge_count(client):
+    mock_account(wedges=0)
+    calls = mock_downloads(plain=Response(200, content=TORRENT))
+
+    assert add() == {"ok": True, "freeleech_wedges": 0}   # only an unknown count is omitted
+    assert calls == [PLAIN_URL]
+
+
+@respx.mock
 def test_account_network_error_returns_502():
-    mock_account(side_effect=httpx.ReadTimeout("slow"))
+    # A real timeout's str() is empty; the detail must still say what happened.
+    mock_account(side_effect=httpx.ReadTimeout(""))
 
     with pytest.raises(HTTPException) as exc:
         asyncio.run(main.account_status())
 
     assert exc.value.status_code == 502
-    assert "MAM account summary request failed" in exc.value.detail
+    assert exc.value.detail == "MAM account summary request failed: request timed out"
+
+
+def test_describe_http_error_never_blank_and_hides_header_values():
+    assert main.describe_http_error(httpx.ConnectTimeout("")) == "request timed out"
+    assert main.describe_http_error(httpx.ConnectError("refused")) == "refused"
+    assert main.describe_http_error(httpx.RemoteProtocolError("")) == "RemoteProtocolError"
+    leaked = httpx.LocalProtocolError("Illegal header value b'mam_id=SECRET\\n'")
+    assert "SECRET" not in main.describe_http_error(leaked)
 
 
 @respx.mock
@@ -144,7 +166,7 @@ def test_add_uses_freeleech_when_wedges_available(client):
     result = add()
 
     assert result == {"ok": True, "freeleech_wedges": 4}
-    assert calls == [f"{MAM}/tor/download.php?tid=42&fl=1"]
+    assert calls == [FL_URL]
 
 
 @respx.mock
@@ -155,28 +177,31 @@ def test_add_falls_back_to_plain_when_freeleech_returns_non_torrent(client):
     result = add()
 
     assert result == {"ok": True, "freeleech_wedges": 5}   # no wedge was spent
-    assert calls == [f"{MAM}/tor/download.php?tid=42&fl=1", f"{MAM}/tor/download.php?tid=42"]
+    assert calls == [FL_URL, PLAIN_URL]
     assert client.added == [TORRENT]
 
 
 @respx.mock
 def test_add_falls_back_to_plain_when_freeleech_request_errors(client):
     mock_account(wedges=5)
-    mock_downloads(plain=Response(200, content=TORRENT), fl=httpx.ReadTimeout("slow"))
+    calls = mock_downloads(plain=Response(200, content=TORRENT), fl=httpx.ReadTimeout("slow"))
 
     assert add() == {"ok": True, "freeleech_wedges": 5}
+    assert calls == [FL_URL, PLAIN_URL]
     assert client.added == [TORRENT]
 
 
 @respx.mock
 def test_add_reports_expired_session_only_when_plain_download_is_not_a_torrent(client):
     mock_account(wedges=5)
-    mock_downloads(plain=Response(200, content=HTML_PAGE), fl=Response(200, content=HTML_PAGE))
+    calls = mock_downloads(plain=Response(200, content=HTML_PAGE), fl=Response(200, content=HTML_PAGE))
 
     with pytest.raises(HTTPException) as exc:
         add()
 
     assert exc.value.status_code == 422
+    assert calls == [FL_URL, PLAIN_URL]           # the plain URL was tried before giving up
+    assert client.added == []
     assert history_hashes() == []
 
 
@@ -190,3 +215,16 @@ def test_add_reports_plain_download_status_after_freeleech_failure(client):
 
     assert exc.value.status_code == 502
     assert "status: 404" in exc.value.detail
+
+
+@respx.mock
+def test_add_reports_plain_network_error_after_freeleech_failure(client):
+    mock_account(wedges=5)
+    calls = mock_downloads(plain=httpx.ConnectError("refused"), fl=Response(200, content=HTML_PAGE))
+
+    with pytest.raises(HTTPException) as exc:
+        add()
+
+    assert exc.value.status_code == 502          # not the misleading 422 "session expired"
+    assert exc.value.detail == "Could not fetch .torrent from MAM: refused"
+    assert calls == [FL_URL, PLAIN_URL]

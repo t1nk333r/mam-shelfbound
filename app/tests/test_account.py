@@ -24,3 +24,9 @@ def test_extract_bonus_points_missing_returns_none():
 
 def test_extract_bonus_points_negative_returns_none():
     assert main.extract_bonus_points({"seedbonus": -3}) is None
+
+
+def test_extract_counts_ignore_infinite_values():
+    assert main.extract_wedge_count({"wedges": "inf"}) is None
+    assert main.extract_wedge_count({"wedges": 1e999}) is None
+    assert main.extract_bonus_points({"seedbonus": "Infinity"}) is None

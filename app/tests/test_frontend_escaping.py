@@ -41,7 +41,19 @@ const item = JSON.parse(itemJson);
 process.stdout.write(vm.runInContext('buildResultRow', ctx)(item).innerHTML);
 """
 
-pytestmark = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def node_major() -> int:
+    """Major version of the installed Node, or 0 if absent/unreadable."""
+    if shutil.which("node") is None:
+        return 0
+    try:
+        out = subprocess.run(["node", "--version"], capture_output=True, text=True, timeout=10)
+        return int(out.stdout.strip().lstrip("v").split(".")[0])
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return 0
+
+
+# app.js uses String.replaceAll (Node 15+).
+pytestmark = pytest.mark.skipif(node_major() < 16, reason="needs Node 16+")
 
 PAYLOAD = '<img src=x onerror="alert(1)">'
 
@@ -49,8 +61,10 @@ PAYLOAD = '<img src=x onerror="alert(1)">'
 def render_result_row(item: dict) -> str:
     out = subprocess.run(
         ["node", "-e", HARNESS, str(APP_JS), json.dumps(item)],
-        capture_output=True, text=True, timeout=30, check=True,
+        capture_output=True, text=True, timeout=30,
     )
+    assert out.returncode == 0, out.stderr
+    assert out.stdout, "buildResultRow produced no HTML"
     return out.stdout
 
 

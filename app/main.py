@@ -346,11 +346,20 @@ def mam_headers(*, torrent: bool = False) -> dict:
         headers["Accept"] = "application/json, text/plain, */*"
     return headers
 
+def describe_http_error(exc: httpx.HTTPError) -> str:
+    """Short reason for a failed request, safe to show the user. A timeout's
+    str() is empty, and a header error can echo the MAM cookie."""
+    if isinstance(exc, httpx.TimeoutException):
+        return "request timed out"
+    if isinstance(exc, httpx.LocalProtocolError):
+        return "invalid request headers"
+    return str(exc) or type(exc).__name__
+
 async def fetch_account_summary(client: httpx.AsyncClient) -> dict:
     try:
         resp = await client.get(f"{settings.MAM_BASE}/jsonLoad.php", headers=mam_headers())
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"MAM account summary request failed: {exc}")
+        raise HTTPException(status_code=502, detail=f"MAM account summary request failed: {describe_http_error(exc)}")
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail=f"MAM account summary failed: {resp.status_code}")
     try:
@@ -367,7 +376,7 @@ def _nonneg_int(raw) -> int | None:
         return None
     try:
         value = int(float(raw))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return value if value >= 0 else None
 
@@ -744,7 +753,7 @@ async def add_to_transmission(body: AddBody):
 
         if metainfo is None:
             if resp is None:
-                raise HTTPException(status_code=502, detail=f"Could not fetch .torrent from MAM: {fetch_error}")
+                raise HTTPException(status_code=502, detail=f"Could not fetch .torrent from MAM: {describe_http_error(fetch_error)}")
             if resp.status_code != 200 or not resp.content:
                 raise HTTPException(
                     status_code=502, detail=f"Could not fetch .torrent from MAM (status: {resp.status_code}).")
@@ -757,7 +766,7 @@ async def add_to_transmission(body: AddBody):
         try:
             torrent_hash = await get_torrent_client().add_torrent(metainfo, mam_id, media_type, send_to_kindle)
         except httpx.HTTPError as exc:
-            raise HTTPException(status_code=502, detail=f"{settings.TORRENT_CLIENT} request failed: {exc}")
+            raise HTTPException(status_code=502, detail=f"{settings.TORRENT_CLIENT} request failed: {describe_http_error(exc)}")
         insert_history(mam_id, title, author, narrator, media_type, send_to_kindle, dl, torrent_hash)
 
     # Omit an unknown wedge count so the page keeps its last known value.
