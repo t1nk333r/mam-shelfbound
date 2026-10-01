@@ -347,7 +347,10 @@ def mam_headers(*, torrent: bool = False) -> dict:
     return headers
 
 async def fetch_account_summary(client: httpx.AsyncClient) -> dict:
-    resp = await client.get(f"{settings.MAM_BASE}/jsonLoad.php", headers=mam_headers())
+    try:
+        resp = await client.get(f"{settings.MAM_BASE}/jsonLoad.php", headers=mam_headers())
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"MAM account summary request failed: {exc}")
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail=f"MAM account summary failed: {resp.status_code}")
     try:
@@ -707,38 +710,61 @@ async def add_to_transmission(body: AddBody):
     freeleech_wedges = None
     use_fl = False
     used_fl = False
-    async with httpx.AsyncClient(timeout=30) as status_client:
-        freeleech_wedges = await fetch_freeleech_wedge_count(status_client)
-        use_fl = should_use_freeleech(media_type, freeleech_wedges, settings.FL_WEDGE_MIN_RESERVE)
+    # The wedge count only decides whether to try a freeleech download. If the
+    # account lookup fails, add without freeleech rather than failing the add.
+    try:
+        async with httpx.AsyncClient(timeout=30) as status_client:
+            freeleech_wedges = await fetch_freeleech_wedge_count(status_client)
+    except HTTPException as exc:
+        logger.warning("Freeleech wedge lookup failed; adding without freeleech: %s", exc.detail)
+    use_fl = should_use_freeleech(media_type, freeleech_wedges, settings.FL_WEDGE_MIN_RESERVE)
 
     async with httpx.AsyncClient(timeout=60) as client:
         candidate_urls = [f"{settings.MAM_BASE}/tor/download.php?tid={mam_id}"]
         if use_fl:
             candidate_urls.insert(0, f"{settings.MAM_BASE}/tor/download.php?tid={mam_id}&fl=1")
 
+        # Try each URL in turn; the plain download is always last, so a failed
+        # freeleech attempt falls back to it and the final error describes it.
         resp = None
+        fetch_error = None
+        metainfo = None
         for candidate_url in candidate_urls:
-            resp = await client.get(candidate_url, headers=mam_headers(torrent=True))
-            if resp.status_code == 200 and resp.content:
-                used_fl = candidate_url.endswith("&fl=1")
+            is_fl = candidate_url.endswith("&fl=1")
+            try:
+                resp = await client.get(candidate_url, headers=mam_headers(torrent=True))
+            except httpx.HTTPError as exc:
+                resp, fetch_error = None, exc
+            if resp is not None and resp.status_code == 200 and is_torrent_metainfo(resp.content):
+                metainfo = resp.content
+                used_fl = is_fl
                 break
+            if is_fl:
+                logger.warning("Freeleech download failed for MAM id %s; retrying without freeleech", mam_id)
 
-        if resp is None or resp.status_code != 200 or not resp.content:
-            status = "unknown" if resp is None else resp.status_code
-            raise HTTPException(status_code=502, detail=f"Could not fetch .torrent from MAM (status: {status}).")
-        if not is_torrent_metainfo(resp.content):
+        if metainfo is None:
+            if resp is None:
+                raise HTTPException(status_code=502, detail=f"Could not fetch .torrent from MAM: {fetch_error}")
+            if resp.status_code != 200 or not resp.content:
+                raise HTTPException(
+                    status_code=502, detail=f"Could not fetch .torrent from MAM (status: {resp.status_code}).")
             raise HTTPException(
                 status_code=422,
                 detail=("MAM did not return a valid torrent file. Your MAM session may have expired; "
                         "refresh MAM_COOKIE and try again."),
             )
 
-        torrent_hash = await get_torrent_client().add_torrent(resp.content, mam_id, media_type, send_to_kindle)
+        try:
+            torrent_hash = await get_torrent_client().add_torrent(metainfo, mam_id, media_type, send_to_kindle)
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"{settings.TORRENT_CLIENT} request failed: {exc}")
         insert_history(mam_id, title, author, narrator, media_type, send_to_kindle, dl, torrent_hash)
 
-    if used_fl and freeleech_wedges is not None:
+    # Omit an unknown wedge count so the page keeps its last known value.
+    if freeleech_wedges is None:
+        return {"ok": True}
+    if used_fl:
         freeleech_wedges = max(freeleech_wedges - 1, 0)
-
     return {"ok": True, "freeleech_wedges": freeleech_wedges}
 
 @app.get("/account")

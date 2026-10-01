@@ -234,7 +234,7 @@ function buildResultRow(it) {
     <td>${escapeHtml(it.author_info || '')}</td>
     <td>${escapeHtml(it.narrator_info || '')}</td>
     <td>${escapeHtml(it.format || '')}</td>
-    <td class="right">${formatSize(it.size)}</td>
+    <td class="right">${escapeHtml(formatSize(it.size))}</td>
     <td class="right">${escapeHtml(`${it.seeders ?? '-'} / ${it.leechers ?? '-'}`)}</td>
     <td>${escapeHtml(it.added || '')}</td>
     <td class="center">
