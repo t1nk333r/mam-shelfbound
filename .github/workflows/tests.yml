@@ -1,6 +1,8 @@
-# Test-only workflow. Building, publishing to GHCR, and cutting release tags
-# are owned by the Jenkins pipeline in the repository root Jenkinsfile.
-name: Tests
+# Tests on every PR and push to main/master. Every push to master (and a manual
+# run on master) then cuts the next patch release: a multi-arch image on GHCR
+# and a GitHub release with generated notes. Replaces the Jenkinsfile, using
+# GITHUB_TOKEN instead of the ghcr-pat / github-release-token credentials.
+name: CI
 
 on:
   pull_request:
@@ -12,7 +14,16 @@ on:
 
 concurrency:
   group: tests-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel a release halfway through its push.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/master' }}
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_REPO: ghcr.io/t1nk333r/mam-shelfbound
+  PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   test:
@@ -32,3 +43,97 @@ jobs:
         run: python -m py_compile app/main.py
       - name: Run tests
         run: cd app && python -m pytest -q
+
+  release:
+    needs: test
+    if: github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Determine version
+        # Next patch after the highest vX.Y.Z tag, skipping any that exist.
+        run: |
+          set -euo pipefail
+          latest="$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          major="${major:-0}" minor="${minor:-0}" patch="${patch:-0}"
+          while :; do
+            patch=$((patch + 1))
+            git rev-parse -q --verify "refs/tags/v${major}.${minor}.${patch}" >/dev/null || break
+          done
+          version="${major}.${minor}.${patch}"
+          {
+            echo "APP_VERSION=$version"
+            echo "RELEASE_TAG=v$version"
+            echo "MAJOR_MINOR=${major}.${minor}"
+            echo "SHORT_SHA=$(git rev-parse --short=7 HEAD)"
+          } >> "$GITHUB_ENV"
+          echo "Version: $version"
+
+      - name: Set up buildx and arm64 emulation
+        run: |
+          set -eu
+          docker run --privileged --rm tonistiigi/binfmt --install arm64
+          docker buildx create --name ci --driver docker-container --use --bootstrap
+          docker buildx inspect | grep -i '^Platforms:'
+
+      - name: Build and smoke test
+        run: |
+          set -eu
+          docker buildx build --platform linux/amd64 \
+            --build-arg APP_VERSION="$APP_VERSION" -t mam-shelfbound:ci --load .
+          docker run --rm \
+            -e MAM_COOKIE=ci-cookie \
+            -e HISTORY_DB_URL=sqlite:////tmp/history.db \
+            mam-shelfbound:ci python -m py_compile main.py
+
+      - name: Log in to GHCR
+        run: echo "$GITHUB_TOKEN" | docker login "$REGISTRY" -u "${{ github.actor }}" --password-stdin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        run: |
+          set -eu
+          docker buildx build --platform "$PLATFORMS" \
+            --build-arg APP_VERSION="$APP_VERSION" \
+            --label "org.opencontainers.image.version=$APP_VERSION" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}" \
+            --cache-from "type=registry,ref=$IMAGE_REPO:buildcache" \
+            --cache-to "type=registry,ref=$IMAGE_REPO:buildcache,mode=max" \
+            -t "$IMAGE_REPO:sha-$SHORT_SHA" \
+            -t "$IMAGE_REPO:$RELEASE_TAG" \
+            -t "$IMAGE_REPO:$APP_VERSION" \
+            -t "$IMAGE_REPO:$MAJOR_MINOR" \
+            -t "$IMAGE_REPO:latest" \
+            --push .
+
+      - name: Create release
+        # The API creates the tag at this commit. Tags made with GITHUB_TOKEN
+        # don't start another workflow run.
+        run: |
+          set -eu
+          notes="Published container image:"
+          for t in "sha-$SHORT_SHA" "$RELEASE_TAG" "$APP_VERSION" "$MAJOR_MINOR" latest; do
+            notes="$notes
+          - \`$IMAGE_REPO:$t\`"
+          done
+          gh api "repos/${{ github.repository }}/releases" \
+            -f tag_name="$RELEASE_TAG" -f target_commitish="$GITHUB_SHA" \
+            -f name="$RELEASE_TAG" -f body="$notes" -F generate_release_notes=true \
+            --jq '.html_url'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log out of GHCR
+        if: always()
+        run: docker logout "$REGISTRY" || true
